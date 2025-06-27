@@ -298,7 +298,25 @@ export default function MusicRecognitionApp() {
       console.log('📚 Existing library songs:', Array.from(existingSongNames));
       console.log('📥 Files being uploaded:', files.map(f => f.name));
       
-      for (const file of files.slice(0, 200)) {
+      // Show progress for large uploads
+      if (files.length > 100) {
+        setShowToast({ 
+          message: `📁 Processing ${files.length} files... This may take a moment for large collections.`, 
+          show: true 
+        });
+        setTimeout(() => setShowToast(null), 5000);
+      }
+      
+      // Warn if exceeding limit
+      if (files.length > 1000) {
+        setShowToast({ 
+          message: `⚠️ Upload limited to 1000 files for performance. Processing first ${Math.min(files.length, 1000)} files.`, 
+          show: true 
+        });
+        setTimeout(() => setShowToast(null), 6000);
+      }
+      
+      for (const file of files.slice(0, 1000)) {
         console.log('📁 File type:', file.type, 'for file:', file.name);
         if (file.type.startsWith('audio/')) {
           const songName = file.name.replace(/\.[^/.]+$/, '');
@@ -1963,7 +1981,7 @@ export default function MusicRecognitionApp() {
               <div className="space-y-1 text-xs text-gray-400 mb-3 flex-grow">
                 <div className="flex items-center">
                   <div className="w-1.5 h-1.5 bg-pink-400 rounded-full mr-2" />
-                  <span>Batch upload up to 200 files</span>
+                  <span>Batch upload up to 1000 files</span>
                 </div>
                 <div className="flex items-center">
                   <div className="w-1.5 h-1.5 bg-purple-400 rounded-full mr-2" />
@@ -2219,7 +2237,7 @@ export default function MusicRecognitionApp() {
               >
                 <Upload className="mx-auto mb-4 h-16 w-16 text-purple-400" />
                 <h3 className="text-2xl font-semibold mb-2">Upload Your Music Library</h3>
-                <p className="text-gray-300">Drag & drop your MP3 files or click to browse (up to 200 files)</p>
+                <p className="text-gray-300">Drag & drop your MP3 files or click to browse (up to 1000 files)</p>
                 {musicLibrary.length > 0 && (
                   <div className="mt-4 text-sm text-gray-400">
                     {musicLibrary.length} songs uploaded
