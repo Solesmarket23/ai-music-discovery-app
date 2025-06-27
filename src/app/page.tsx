@@ -1346,7 +1346,7 @@ export default function MusicRecognitionApp() {
                      <motion.span 
                        className="inline-block ml-2 opacity-60"
                        animate={{ rotate: [0, 360] }}
-                       transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                       transition={{ duration: 2, repeat: Infinity, ease: "linear", repeatType: "loop" }}
                      >
                        ⟳
                      </motion.span>
@@ -1874,8 +1874,13 @@ export default function MusicRecognitionApp() {
                     {/* Album Art Placeholder */}
                     <motion.div 
                       className={`${isPlayerMinimized ? 'w-12 h-12' : 'w-16 h-16'} bg-gradient-to-br from-pink-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-xl relative overflow-hidden transition-all duration-300`}
-                      animate={{ rotate: isPlaying ? 360 : 0 }}
-                      transition={{ duration: 20, repeat: isPlaying ? Infinity : 0, ease: "linear" }}
+                      animate={{ rotate: isPlaying ? [0, 360] : 0 }}
+                      transition={{ 
+                        duration: 20, 
+                        repeat: isPlaying ? Infinity : 0, 
+                        ease: "linear",
+                        repeatType: "loop"
+                      }}
                     >
                       <Music className={`${isPlayerMinimized ? 'h-6 w-6' : 'h-8 w-8'} text-white transition-all duration-300`} />
                       {isPlaying && (
