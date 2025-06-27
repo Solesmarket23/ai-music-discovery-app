@@ -21,7 +21,8 @@ interface AIInsights {
 }
 
 export default function MusicRecognitionApp() {
-  const [currentView, setCurrentView] = useState<'landing' | 'upload' | 'library'>('landing');
+  const [currentView, setCurrentView] = useState<'landing' | 'upload' | 'library' | 'pricing'>('landing');
+  const [isAnnualBilling, setIsAnnualBilling] = useState(false);
   const [musicLibrary, setMusicLibrary] = useState<MusicTrack[]>([]);
   const [currentTrack, setCurrentTrack] = useState<MusicTrack | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -427,6 +428,20 @@ export default function MusicRecognitionApp() {
     }
   };
 
+  // Go to next song (shuffle or sequential based on mode)
+  const goToNextSong = () => {
+    if (isShuffleMode) {
+      shuffleToUnratedSong();
+    } else {
+      // Go to next song in library order
+      if (musicLibrary.length > 0 && currentTrack) {
+        const currentIndex = musicLibrary.findIndex(track => track.id === currentTrack.id);
+        const nextIndex = currentIndex < musicLibrary.length - 1 ? currentIndex + 1 : 0;
+        playTrack(musicLibrary[nextIndex]);
+      }
+    }
+  };
+
   // Go to previous song using actual play history
   const goToPreviousSong = () => {
     if (playHistory.length > 0 && currentTrack) {
@@ -537,6 +552,22 @@ export default function MusicRecognitionApp() {
   // Revolutionary Landing Page Component - Apple-Beating Design
   const renderLandingPage = () => (
     <div className="min-h-screen flex items-start justify-center relative overflow-hidden pt-16 pb-8">
+      {/* Floating Pricing Button */}
+      <motion.button
+        initial={{ opacity: 0, scale: 0.8, y: -20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ delay: 2, type: "spring", damping: 20 }}
+        whileHover={{ scale: 1.05, y: -2 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={() => setCurrentView('pricing')}
+        className="fixed top-6 right-6 z-50 bg-gradient-to-r from-orange-500/90 to-red-500/90 backdrop-blur-xl text-white px-4 py-2 rounded-full shadow-lg hover:shadow-orange-500/25 transition-all duration-300 border border-white/10"
+      >
+        <div className="flex items-center space-x-2">
+          <Star className="h-4 w-4" />
+          <span className="font-semibold">Upgrade</span>
+        </div>
+      </motion.button>
+
       {/* Ultra-Premium Layered Background System */}
       <div className="absolute inset-0">
         {/* Neural Network Particle System */}
@@ -813,7 +844,7 @@ export default function MusicRecognitionApp() {
 
                  {/* Action Cards */}
          <motion.div 
-           className="relative grid md:grid-cols-2 gap-6 max-w-4xl mx-auto"
+           className="relative grid md:grid-cols-3 gap-6 max-w-6xl mx-auto"
            initial={{ opacity: 0, y: 30 }}
            animate={{ opacity: 1, y: 0 }}
            transition={{ delay: 0.7, staggerChildren: 0.2 }}
@@ -1087,6 +1118,96 @@ export default function MusicRecognitionApp() {
                </motion.div>
             </div>
           </motion.div>
+
+          {/* Pricing Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.2 }}
+            whileHover={{ 
+              scale: 1.02, 
+              y: -10,
+              transition: { type: "spring", damping: 20 }
+            }}
+            onClick={() => setCurrentView('pricing')}
+            onKeyDown={(e) => e.key === 'Enter' && setCurrentView('pricing')}
+            tabIndex={0}
+            role="button"
+            aria-label="View pricing plans for premium features"
+            className="group relative cursor-pointer focus:outline-none focus:ring-4 focus:ring-orange-500/50 rounded-3xl"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-red-600 rounded-3xl blur-xl opacity-25 group-hover:opacity-40 transition-opacity duration-500" />
+            <div className="relative bg-gradient-to-br from-gray-900/90 to-black/90 backdrop-blur-xl rounded-3xl border border-white/10 p-6 overflow-hidden">
+              {/* Card Background Effect */}
+              <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-red-500/5 group-hover:from-orange-500/10 group-hover:to-red-500/10 transition-all duration-500" />
+              
+              {/* Icon */}
+              <motion.div 
+                className="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-orange-500 to-red-600 rounded-2xl flex items-center justify-center shadow-2xl group-hover:shadow-orange-500/25 transition-all duration-300"
+                whileHover={{ rotate: [0, -5, 5, 0], scale: 1.1 }}
+              >
+                <Star className="h-8 w-8 text-white" />
+              </motion.div>
+              
+              {/* Content */}
+              <h3 className="text-2xl font-bold mb-3 bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent">
+                Upgrade Plans
+              </h3>
+              <p className="text-gray-300 text-base leading-relaxed mb-4">
+                Unlock premium features with unlimited uploads, advanced AI, and priority support.
+              </p>
+              
+              {/* Features */}
+              <div className="space-y-2 text-sm text-gray-400 mb-4">
+                <div className="flex items-center">
+                  <div className="w-2 h-2 bg-orange-400 rounded-full mr-3" />
+                  <span>Unlimited song uploads</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-2 h-2 bg-red-400 rounded-full mr-3" />
+                  <span>Advanced AI recommendations</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-2 h-2 bg-yellow-400 rounded-full mr-3" />
+                  <span>Priority customer support</span>
+                </div>
+              </div>
+              
+              {/* Enhanced Button */}
+              <motion.div 
+                className="relative bg-gradient-to-r from-orange-500 to-red-600 rounded-2xl p-4 text-center font-semibold text-white group-hover:from-orange-400 group-hover:to-red-500 transition-all duration-300 overflow-hidden cursor-pointer"
+                whileHover={{ scale: 1.02, y: -2 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                {/* Shimmer Effect */}
+                <motion.div
+                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12"
+                  initial={{ x: '-100%' }}
+                  whileHover={{ x: '200%' }}
+                  transition={{ duration: 0.6 }}
+                />
+                
+                <div className="relative z-10 flex items-center justify-center">
+                  <span>View Plans</span>
+                  <motion.span 
+                    className="inline-block ml-2"
+                    animate={{ x: [0, 5, 0] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                  >
+                    ✨
+                  </motion.span>
+                </div>
+                
+                {/* Ripple Effect */}
+                <motion.div
+                  className="absolute inset-0 bg-white/10 rounded-2xl"
+                  initial={{ scale: 0, opacity: 0.5 }}
+                  whileTap={{ scale: 1.5, opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                />
+              </motion.div>
+            </div>
+          </motion.div>
         </motion.div>
 
         {/* Stats Bar */}
@@ -1339,10 +1460,7 @@ export default function MusicRecognitionApp() {
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => {
-                    setIsShuffleMode(!isShuffleMode);
-                    if (!isShuffleMode) shuffleToUnratedSong();
-                  }}
+                  onClick={() => setIsShuffleMode(!isShuffleMode)}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-semibold transition-all duration-300 ${
                     isShuffleMode 
                       ? 'bg-gradient-to-r from-pink-500 to-purple-600' 
@@ -1631,7 +1749,7 @@ export default function MusicRecognitionApp() {
                     <motion.button
                       whileHover={{ scale: 1.1, y: -2 }}
                       whileTap={{ scale: 0.95 }}
-                      onClick={shuffleToUnratedSong}
+                      onClick={goToNextSong}
                       className={`group relative ${isPlayerMinimized ? 'p-2' : 'p-3'} rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 transition-all duration-300 shadow-lg hover:shadow-xl`}
                     >
                       <SkipForward className={`${isPlayerMinimized ? 'h-4 w-4' : 'h-5 w-5'} text-gray-300 group-hover:text-white transition-colors`} />
@@ -1660,10 +1778,7 @@ export default function MusicRecognitionApp() {
                     <motion.button
                       whileHover={{ scale: 1.1, y: -2 }}
                       whileTap={{ scale: 0.95 }}
-                      onClick={() => {
-                        setIsShuffleMode(!isShuffleMode);
-                        if (!isShuffleMode) shuffleToUnratedSong();
-                      }}
+                      onClick={() => setIsShuffleMode(!isShuffleMode)}
                       className={`group relative ${isPlayerMinimized ? 'p-2' : 'p-3'} rounded-2xl backdrop-blur-sm border transition-all duration-300 shadow-lg hover:shadow-xl ${
                         isShuffleMode 
                           ? 'bg-gradient-to-r from-pink-500/20 to-purple-500/20 border-pink-500/50' 
@@ -1915,9 +2030,7 @@ export default function MusicRecognitionApp() {
                        <motion.button
                          whileHover={{ scale: 1.05, y: -1 }}
                          whileTap={{ scale: 0.95 }}
-                         onClick={() => {
-                           if (isShuffleMode) shuffleToUnratedSong();
-                         }}
+                         onClick={goToNextSong}
                          className="flex items-center space-x-2 px-3 py-1.5 bg-gradient-to-r from-blue-500/15 to-purple-500/15 border border-blue-500/30 rounded-full text-xs font-medium text-blue-300 hover:text-blue-200 hover:border-blue-400/50 transition-all duration-300"
                        >
                          <SkipForward className="h-3 w-3" />
@@ -1974,6 +2087,358 @@ export default function MusicRecognitionApp() {
         )}
       </AnimatePresence>
 
+      {/* Pricing View */}
+      {currentView === 'pricing' && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          className="min-h-screen p-8"
+        >
+          {/* Header */}
+          <div className="mb-8">
+            <motion.button
+              whileHover={{ scale: 1.05, x: -5 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setCurrentView('landing')}
+              className="flex items-center space-x-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-full transition-all duration-300 mb-6"
+            >
+              <span className="text-xl">←</span>
+              <span>Back</span>
+            </motion.button>
+            
+            <motion.h1 
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-6xl font-bold text-center mb-4 bg-gradient-to-r from-pink-400 to-purple-300 bg-clip-text text-transparent"
+            >
+              🎵 Choose Your Plan
+            </motion.h1>
+            <motion.p 
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="text-xl text-center text-gray-300 mb-8"
+            >
+              Unlock the full power of AI music discovery
+            </motion.p>
+            
+            {/* Modern Billing Selection */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="flex items-center justify-center mb-16"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl">
+                
+                {/* Monthly Option */}
+                <motion.div
+                  whileHover={{ scale: 1.02, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setIsAnnualBilling(false)}
+                  className={`relative cursor-pointer p-6 rounded-2xl border-2 transition-all duration-300 backdrop-blur-lg ${
+                    !isAnnualBilling 
+                      ? 'border-purple-500 bg-gradient-to-br from-purple-900/40 to-pink-900/40 shadow-lg shadow-purple-500/25' 
+                      : 'border-gray-600 bg-gray-800/40 hover:border-gray-500 hover:bg-gray-800/60'
+                  }`}
+                >
+                  <div className="text-center">
+                    <h3 className="text-lg font-bold text-white mb-1">Monthly</h3>
+                    <div className="text-2xl font-bold text-white mb-1">$9.99<span className="text-sm text-gray-300">/month</span></div>
+                    <p className="text-sm text-gray-400">Billed monthly</p>
+                  </div>
+                  
+                  {/* Selection Indicator */}
+                  {!isAnnualBilling && (
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="absolute top-3 right-3 w-6 h-6 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center"
+                    >
+                      <span className="text-white text-xs">✓</span>
+                    </motion.div>
+                  )}
+                </motion.div>
+
+                {/* Annual Option */}
+                <motion.div
+                  whileHover={{ scale: 1.02, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setIsAnnualBilling(true)}
+                  className={`relative cursor-pointer p-6 rounded-2xl border-2 transition-all duration-300 backdrop-blur-lg ${
+                    isAnnualBilling 
+                      ? 'border-green-500 bg-gradient-to-br from-green-900/40 to-emerald-900/40 shadow-lg shadow-green-500/25' 
+                      : 'border-gray-600 bg-gray-800/40 hover:border-gray-500 hover:bg-gray-800/60'
+                  }`}
+                >
+                  {/* Most Popular Badge */}
+                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                    <motion.span 
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.6 }}
+                      className="bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs px-4 py-1 rounded-full font-bold shadow-lg"
+                    >
+                      Most Popular
+                    </motion.span>
+                  </div>
+                  
+                  <div className="text-center mt-2">
+                    <h3 className="text-lg font-bold text-white mb-1">Annual</h3>
+                    <div className="text-2xl font-bold text-white mb-1">
+                      <span className="text-sm text-gray-400 line-through mr-2">$119.88</span>
+                      $99.99<span className="text-sm text-gray-300">/year</span>
+                    </div>
+                    <p className="text-sm text-green-400 font-semibold">Save $19.89 (17% off)</p>
+                    <p className="text-xs text-gray-400 mt-1">That's $8.33/month</p>
+                  </div>
+                  
+                  {/* Selection Indicator */}
+                  {isAnnualBilling && (
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="absolute top-3 right-3 w-6 h-6 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center"
+                    >
+                      <span className="text-white text-xs">✓</span>
+                    </motion.div>
+                  )}
+                  
+                  {/* Savings Highlight */}
+                  <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2">
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: 0.8, type: "spring", damping: 15 }}
+                      className="bg-gradient-to-r from-yellow-500 to-orange-500 text-black text-xs px-3 py-1 rounded-full font-bold shadow-lg"
+                    >
+                      💰 Best Value
+                    </motion.div>
+                  </div>
+                </motion.div>
+                
+              </div>
+            </motion.div>
+          </div>
+
+          {/* Pricing Cards */}
+          <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
+            {/* Free Plan */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              whileHover={{ scale: 1.02, y: -5 }}
+              className="bg-gradient-to-br from-gray-800/60 to-gray-900/60 backdrop-blur-lg rounded-xl p-8 border border-gray-700 hover:border-gray-500 transition-all duration-300"
+            >
+              <div className="text-center mb-6">
+                <h3 className="text-2xl font-bold text-gray-200 mb-2">Starter</h3>
+                <div className="text-4xl font-bold text-white mb-2">Free</div>
+                <p className="text-gray-400">Perfect for getting started</p>
+              </div>
+              
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-center">
+                  <span className="text-green-400 mr-3">✓</span>
+                  Upload up to 50 songs
+                </li>
+                <li className="flex items-center">
+                  <span className="text-green-400 mr-3">✓</span>
+                  Basic audio visualization
+                </li>
+                <li className="flex items-center">
+                  <span className="text-green-400 mr-3">✓</span>
+                  Song rating system
+                </li>
+                <li className="flex items-center">
+                  <span className="text-gray-500 mr-3">✗</span>
+                  <span className="text-gray-500">AI recommendations</span>
+                </li>
+                <li className="flex items-center">
+                  <span className="text-gray-500 mr-3">✗</span>
+                  <span className="text-gray-500">Advanced analytics</span>
+                </li>
+              </ul>
+              
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="w-full py-3 px-6 bg-gray-700 hover:bg-gray-600 rounded-lg font-semibold transition-all duration-300"
+              >
+                Current Plan
+              </motion.button>
+            </motion.div>
+
+            {/* Pro Plan */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              whileHover={{ scale: 1.02, y: -5 }}
+              className="bg-gradient-to-br from-purple-800/60 to-pink-800/60 backdrop-blur-lg rounded-xl p-8 border-2 border-purple-500 hover:border-purple-400 transition-all duration-300 relative"
+            >
+              {/* Popular Badge */}
+              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                <span className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-1 rounded-full text-sm font-semibold">
+                  Most Popular
+                </span>
+              </div>
+              
+                             <div className="text-center mb-6">
+                 <h3 className="text-2xl font-bold text-white mb-2">Pro</h3>
+                 <div className="text-4xl font-bold text-white mb-2">
+                   {isAnnualBilling ? (
+                     <>
+                       <span className="text-2xl text-gray-400 line-through mr-2">$119.88</span>
+                       $99.99<span className="text-lg text-gray-300">/year</span>
+                     </>
+                   ) : (
+                     <>$9.99<span className="text-lg text-gray-300">/month</span></>
+                   )}
+                 </div>
+                 {isAnnualBilling && (
+                   <p className="text-green-400 font-semibold text-sm mb-2">2 months free • Save $19.89</p>
+                 )}
+                 <p className="text-gray-300">For serious music lovers</p>
+               </div>
+              
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-center">
+                  <span className="text-green-400 mr-3">✓</span>
+                  Upload unlimited songs
+                </li>
+                <li className="flex items-center">
+                  <span className="text-green-400 mr-3">✓</span>
+                  Real-time audio visualization
+                </li>
+                <li className="flex items-center">
+                  <span className="text-green-400 mr-3">✓</span>
+                  AI-powered recommendations
+                </li>
+                <li className="flex items-center">
+                  <span className="text-green-400 mr-3">✓</span>
+                  Advanced music analytics
+                </li>
+                <li className="flex items-center">
+                  <span className="text-green-400 mr-3">✓</span>
+                  Priority support
+                </li>
+              </ul>
+              
+                             <motion.button
+                 whileHover={{ scale: 1.05 }}
+                 whileTap={{ scale: 0.95 }}
+                 className="w-full py-3 px-6 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-lg font-semibold text-white transition-all duration-300"
+               >
+                 {isAnnualBilling ? 'Get Annual Pro' : 'Upgrade to Pro'}
+               </motion.button>
+            </motion.div>
+
+            {/* Enterprise Plan */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              whileHover={{ scale: 1.02, y: -5 }}
+              className="bg-gradient-to-br from-blue-800/60 to-indigo-800/60 backdrop-blur-lg rounded-xl p-8 border border-blue-700 hover:border-blue-500 transition-all duration-300"
+            >
+                             <div className="text-center mb-6">
+                 <h3 className="text-2xl font-bold text-blue-200 mb-2">Enterprise</h3>
+                 <div className="text-4xl font-bold text-white mb-2">
+                   {isAnnualBilling ? (
+                     <>
+                       <span className="text-2xl text-gray-400 line-through mr-2">$359.88</span>
+                       $299.99<span className="text-lg text-gray-300">/year</span>
+                     </>
+                   ) : (
+                     <>$29.99<span className="text-lg text-gray-300">/month</span></>
+                   )}
+                 </div>
+                 {isAnnualBilling && (
+                   <p className="text-green-400 font-semibold text-sm mb-2">2 months free • Save $59.89</p>
+                 )}
+                 <p className="text-gray-300">For teams and professionals</p>
+               </div>
+              
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-center">
+                  <span className="text-green-400 mr-3">✓</span>
+                  Everything in Pro
+                </li>
+                <li className="flex items-center">
+                  <span className="text-green-400 mr-3">✓</span>
+                  Team collaboration tools
+                </li>
+                <li className="flex items-center">
+                  <span className="text-green-400 mr-3">✓</span>
+                  API access
+                </li>
+                <li className="flex items-center">
+                  <span className="text-green-400 mr-3">✓</span>
+                  Custom AI training
+                </li>
+                <li className="flex items-center">
+                  <span className="text-green-400 mr-3">✓</span>
+                  24/7 premium support
+                </li>
+              </ul>
+              
+                             <motion.button
+                 whileHover={{ scale: 1.05 }}
+                 whileTap={{ scale: 0.95 }}
+                 className="w-full py-3 px-6 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 rounded-lg font-semibold text-white transition-all duration-300"
+               >
+                 {isAnnualBilling ? 'Get Annual Enterprise' : 'Contact Sales'}
+               </motion.button>
+            </motion.div>
+          </div>
+
+          {/* Features Comparison */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="mt-16 max-w-4xl mx-auto"
+          >
+            <h2 className="text-3xl font-bold text-center mb-8 text-white">Why Choose AI Music Discovery?</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Brain className="h-8 w-8 text-white" />
+                </div>
+                <h3 className="font-semibold mb-2">Smart AI Learning</h3>
+                <p className="text-gray-400 text-sm">Our AI learns your taste and suggests perfect matches</p>
+              </div>
+              
+              <div className="text-center">
+                <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Music className="h-8 w-8 text-white" />
+                </div>
+                <h3 className="font-semibold mb-2">Real-time Visualization</h3>
+                <p className="text-gray-400 text-sm">See your music come alive with dynamic visualizations</p>
+              </div>
+              
+              <div className="text-center">
+                <div className="w-16 h-16 bg-gradient-to-r from-green-500 to-teal-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Star className="h-8 w-8 text-white" />
+                </div>
+                <h3 className="font-semibold mb-2">Personalized Discovery</h3>
+                <p className="text-gray-400 text-sm">Discover new music tailored to your unique taste</p>
+              </div>
+              
+              <div className="text-center">
+                <div className="w-16 h-16 bg-gradient-to-r from-orange-500 to-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Upload className="h-8 w-8 text-white" />
+                </div>
+                <h3 className="font-semibold mb-2">Easy Upload</h3>
+                <p className="text-gray-400 text-sm">Drag and drop your music files for instant analysis</p>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
       {/* Debug Audio Analysis Info - Remove in production */}
       {isPlaying && (
         <div className="fixed bottom-4 right-4 bg-black/80 backdrop-blur-sm text-white p-3 rounded-lg text-xs z-50">
@@ -2005,8 +2470,12 @@ export default function MusicRecognitionApp() {
           console.log('✅ Audio can play');
         }}
         onEnded={() => {
-          if (isShuffleMode) shuffleToUnratedSong();
-          else setIsPlaying(false);
+          if (isShuffleMode) {
+            shuffleToUnratedSong();
+          } else {
+            // Auto-advance to next song in library order
+            goToNextSong();
+          }
         }}
         onError={(e) => {
           console.error('Audio error:', e);
