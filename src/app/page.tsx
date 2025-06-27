@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Music, Settings, Play, Pause, Star, Brain, SkipForward, SkipBack, Shuffle, Volume2, Search, ChevronDown, ChevronUp, Save, RotateCcw, Eye, EyeOff, Zap, Palette, Monitor, Sun, Moon, Info, HelpCircle, Download, Users, Sparkles } from 'lucide-react';
+import { Upload, Music, Settings, Play, Pause, Star, Brain, SkipForward, SkipBack, Shuffle, Volume2, Search, ChevronDown, ChevronUp, Save, RotateCcw, Eye, EyeOff, Zap, Palette, Monitor, Sun, Moon, Info, HelpCircle, Download, Users, Sparkles, Minimize2, Maximize2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Interface definitions
@@ -56,6 +56,7 @@ export default function MusicRecognitionApp() {
   const [recommendations, setRecommendations] = useState<MusicTrack[]>([]);
   const [playHistory, setPlayHistory] = useState<string[]>([]);
   const [showToast, setShowToast] = useState<{ message: string; show: boolean } | null>(null);
+  const [isPlayerMinimized, setIsPlayerMinimized] = useState(false);
 
   // Refs
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -486,150 +487,302 @@ export default function MusicRecognitionApp() {
           <span className="flex items-center"><span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>Discover</span>
         </motion.div>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          {/* Upload Songs Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.7 }}
-            whileHover={{ scale: 1.02, y: -5 }}
-            className="bg-gray-800/40 backdrop-blur-lg p-8 rounded-2xl border border-gray-700/50 hover:border-pink-500/50 transition-all duration-300"
-          >
-            <div className="text-center">
+                 {/* Action Cards */}
+         <motion.div 
+           className="relative grid md:grid-cols-3 gap-8 max-w-5xl mx-auto items-stretch"
+           initial={{ opacity: 0, y: 30 }}
+           animate={{ opacity: 1, y: 0 }}
+           transition={{ delay: 0.7, staggerChildren: 0.2 }}
+         >
+
+                     {/* Upload Songs Card */}
+           <motion.div
+             initial={{ opacity: 0, x: -50 }}
+             animate={{ opacity: 1, x: 0 }}
+             transition={{ delay: 0.8 }}
+             whileHover={{ 
+               scale: 1.02, 
+               y: -10,
+               transition: { type: "spring", damping: 20 }
+             }}
+             onClick={() => setCurrentView('upload')}
+             onKeyDown={(e) => e.key === 'Enter' && setCurrentView('upload')}
+             tabIndex={0}
+             role="button"
+             aria-label="Upload your music collection to get started"
+             className="group relative cursor-pointer focus:outline-none focus:ring-4 focus:ring-pink-500/50 rounded-3xl"
+           >
+                         <div className="absolute inset-0 bg-gradient-to-r from-pink-500 to-purple-600 rounded-3xl blur-xl opacity-25 group-hover:opacity-40 transition-opacity duration-500" />
+            <div className="relative bg-gradient-to-br from-gray-900/90 to-black/90 backdrop-blur-xl rounded-3xl border border-white/10 p-8 overflow-hidden h-full flex flex-col">
+              {/* Card Background Effect */}
+              <div className="absolute inset-0 bg-gradient-to-br from-pink-500/5 to-purple-500/5 group-hover:from-pink-500/10 group-hover:to-purple-500/10 transition-all duration-500" />
+              
+              {/* Icon */}
               <motion.div 
-                className="inline-block p-4 bg-gradient-to-br from-pink-500/20 to-purple-500/20 rounded-xl mb-4"
-                whileHover={{ rotate: 5, scale: 1.05 }}
+                className="w-20 h-20 mx-auto mb-6 bg-gradient-to-r from-pink-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-2xl group-hover:shadow-pink-500/25 transition-all duration-300"
+                whileHover={{ rotate: [0, -5, 5, 0], scale: 1.1 }}
               >
-                <Upload className="h-8 w-8 text-pink-400" />
+                <Upload className="h-10 w-10 text-white" />
               </motion.div>
-              <h3 className="text-2xl font-bold text-white mb-3">Upload Songs</h3>
-              <p className="text-gray-300 mb-6 leading-relaxed">
-                Start your journey by uploading<br />
-                your music collection. Support for<br />
-                MP3, WAV, and M4A files.
+              
+              {/* Content */}
+              <h3 className="text-3xl font-bold mb-4 bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
+                Upload Songs
+              </h3>
+              <p className="text-gray-300 text-lg leading-relaxed mb-6">
+                Start your journey by uploading your music collection. 
+                Support for MP3, WAV, and M4A files.
               </p>
-              <ul className="text-sm text-gray-400 mb-6 space-y-2">
-                <li className="flex items-center justify-center">
-                  <div className="w-2 h-2 bg-pink-400 rounded-full mr-2"></div>
-                  Batch upload up to 200 files
-                </li>
-                <li className="flex items-center justify-center">
-                  <div className="w-2 h-2 bg-purple-400 rounded-full mr-2"></div>
-                  Instant audio processing
-                </li>
-                <li className="flex items-center justify-center">
-                  <div className="w-2 h-2 bg-blue-400 rounded-full mr-2"></div>
-                  Smart file organization
-                </li>
-              </ul>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setCurrentView('upload')}
-                className="w-full py-3 px-6 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 rounded-xl font-semibold text-white transition-all duration-300 flex items-center justify-center space-x-2"
-              >
-                <span>Get Started</span>
-                <span>→</span>
-              </motion.button>
+              
+                             {/* Features */}
+               <div className="space-y-2 text-sm text-gray-400 mb-6 flex-grow">
+                 <div className="flex items-center">
+                   <div className="w-2 h-2 bg-pink-400 rounded-full mr-3" />
+                   <span>Batch upload up to 200 files</span>
+                 </div>
+                 <div className="flex items-center">
+                   <div className="w-2 h-2 bg-purple-400 rounded-full mr-3" />
+                   <span>Instant audio processing</span>
+                 </div>
+                 <div className="flex items-center">
+                   <div className="w-2 h-2 bg-blue-400 rounded-full mr-3" />
+                   <span>Smart file organization</span>
+                 </div>
+               </div>
+              
+                             {/* Enhanced Button with Micro-interactions */}
+               <motion.div 
+                 className="relative bg-gradient-to-r from-pink-500 to-purple-600 rounded-2xl p-4 text-center font-semibold text-white group-hover:from-pink-400 group-hover:to-purple-500 transition-all duration-300 overflow-hidden cursor-pointer"
+                 whileHover={{ scale: 1.02, y: -2 }}
+                 whileTap={{ scale: 0.98 }}
+               >
+                 {/* Shimmer Effect */}
+                 <motion.div
+                   className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12"
+                   initial={{ x: '-100%' }}
+                   whileHover={{ x: '200%' }}
+                   transition={{ duration: 0.6 }}
+                 />
+                 
+                 <div className="relative z-10 flex items-center justify-center">
+                   <span>Get Started</span>
+                   <motion.span 
+                     className="inline-block ml-2"
+                     animate={{ x: [0, 5, 0] }}
+                     transition={{ duration: 1.5, repeat: Infinity }}
+                   >
+                     →
+                   </motion.span>
+                 </div>
+                 
+                 {/* Ripple Effect */}
+                 <motion.div
+                   className="absolute inset-0 bg-white/10 rounded-2xl"
+                   initial={{ scale: 0, opacity: 0.5 }}
+                   whileTap={{ scale: 1.5, opacity: 0 }}
+                   transition={{ duration: 0.3 }}
+                 />
+               </motion.div>
             </div>
           </motion.div>
 
-          {/* Music Library Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8 }}
-            whileHover={{ scale: 1.02, y: -5 }}
-            className="bg-gray-800/40 backdrop-blur-lg p-8 rounded-2xl border border-gray-700/50 hover:border-teal-500/50 transition-all duration-300"
+                     {/* View Library Card */}
+           <motion.div
+             initial={{ opacity: 0, x: 50 }}
+             animate={{ opacity: 1, x: 0 }}
+             transition={{ delay: 1 }}
+             whileHover={musicLibrary.length > 0 ? { 
+               scale: 1.02, 
+               y: -10,
+               transition: { type: "spring", damping: 20 }
+             } : {}}
+             onClick={() => musicLibrary.length > 0 && setCurrentView('library')}
+             onKeyDown={(e) => e.key === 'Enter' && musicLibrary.length > 0 && setCurrentView('library')}
+             tabIndex={musicLibrary.length > 0 ? 0 : -1}
+             role="button"
+             aria-label={musicLibrary.length > 0 ? `View your music library with ${musicLibrary.length} songs` : 'Music library is empty. Upload songs first.'}
+             aria-disabled={musicLibrary.length === 0}
+             className={`group relative rounded-3xl focus:outline-none ${
+               musicLibrary.length > 0 
+                 ? 'cursor-pointer focus:ring-4 focus:ring-blue-500/50' 
+                 : 'opacity-50 cursor-not-allowed'
+             }`}
           >
-            <div className="text-center">
+                         <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-3xl blur-xl opacity-25 group-hover:opacity-40 transition-opacity duration-500" />
+            <div className="relative bg-gradient-to-br from-gray-900/90 to-black/90 backdrop-blur-xl rounded-3xl border border-white/10 p-8 overflow-hidden h-full flex flex-col">
+              {/* Card Background Effect */}
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5 group-hover:from-blue-500/10 group-hover:to-indigo-500/10 transition-all duration-500" />
+              
+              {/* Icon */}
               <motion.div 
-                className="inline-block p-4 bg-gradient-to-br from-teal-500/20 to-blue-500/20 rounded-xl mb-4"
-                whileHover={{ rotate: 5, scale: 1.05 }}
+                className="w-20 h-20 mx-auto mb-6 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-2xl group-hover:shadow-blue-500/25 transition-all duration-300"
+                whileHover={{ rotate: [0, -5, 5, 0], scale: 1.1 }}
               >
-                <Music className="h-8 w-8 text-teal-400" />
+                <Music className="h-10 w-10 text-white" />
               </motion.div>
-              <h3 className="text-2xl font-bold text-white mb-3">Music Library</h3>
-              <p className="text-gray-300 mb-6 leading-relaxed">
-                Your music library is empty.<br />
-                Upload some songs first to get<br />
-                started.
+              
+              {/* Content */}
+              <h3 className="text-3xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
+                Music Library
+              </h3>
+              <p className="text-gray-300 text-lg leading-relaxed mb-6">
+                {musicLibrary.length > 0 
+                  ? `Explore your collection of ${musicLibrary.length} songs and rate them for AI learning.`
+                  : 'Your music library is empty. Upload some songs first to get started.'
+                }
               </p>
-              <ul className="text-sm text-gray-400 mb-6 space-y-2">
-                <li className="flex items-center justify-center">
-                  <div className="w-2 h-2 bg-teal-400 rounded-full mr-2"></div>
-                  Waiting for music
-                </li>
-                <li className="flex items-center justify-center">
-                  <div className="w-2 h-2 bg-gray-500 rounded-full mr-2"></div>
-                  AI learning ready
-                </li>
-                <li className="flex items-center justify-center">
-                  <div className="w-2 h-2 bg-gray-500 rounded-full mr-2"></div>
-                  Discover new favorites
-                </li>
-              </ul>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => musicLibrary.length > 0 ? setCurrentView('library') : setCurrentView('upload')}
-                className="w-full py-3 px-6 bg-gradient-to-r from-gray-600 to-gray-700 hover:from-teal-600 hover:to-blue-600 rounded-xl font-semibold text-white transition-all duration-300 flex items-center justify-center space-x-2"
-              >
-                <Upload className="h-4 w-4" />
-                <span>Upload First</span>
-                <span>→</span>
-              </motion.button>
-            </div>
-          </motion.div>
+              
+                             {/* Features */}
+               <div className="space-y-2 text-sm text-gray-400 mb-6 flex-grow">
+                 <div className="flex items-center">
+                   <div className="w-2 h-2 bg-blue-400 rounded-full mr-3" />
+                   <span>{musicLibrary.length > 0 ? 'Rate and organize' : 'Waiting for music'}</span>
+                 </div>
+                 <div className="flex items-center">
+                   <div className="w-2 h-2 bg-indigo-400 rounded-full mr-3" />
+                   <span>{aiInsights.totalRatedSongs > 0 ? `${aiInsights.totalRatedSongs} songs rated` : 'AI learning ready'}</span>
+                 </div>
+                 <div className="flex items-center">
+                   <div className="w-2 h-2 bg-purple-400 rounded-full mr-3" />
+                   <span>{aiInsights.readyForRecommendations ? 'AI recommendations ready!' : 'Discover new favorites'}</span>
+                 </div>
+               </div>
+              
+                             {/* Enhanced Button with Smart States */}
+               <motion.div 
+                 className={`relative rounded-2xl p-4 text-center font-semibold text-white transition-all duration-300 overflow-hidden ${
+                   musicLibrary.length > 0
+                     ? 'bg-gradient-to-r from-blue-500 to-indigo-600 group-hover:from-blue-400 group-hover:to-indigo-500 cursor-pointer'
+                     : 'bg-gradient-to-r from-gray-600 to-gray-700 cursor-not-allowed'
+                 }`}
+                 whileHover={musicLibrary.length > 0 ? { scale: 1.02, y: -2 } : { scale: 1.01 }}
+                 whileTap={musicLibrary.length > 0 ? { scale: 0.98 } : {}}
+               >
+                 {/* Shimmer Effect for Active State */}
+                 {musicLibrary.length > 0 && (
+                   <motion.div
+                     className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12"
+                     initial={{ x: '-100%' }}
+                     whileHover={{ x: '200%' }}
+                     transition={{ duration: 0.6 }}
+                   />
+                 )}
+                 
+                 <div className="relative z-10 flex items-center justify-center">
+                   <span>{musicLibrary.length > 0 ? 'View Library' : 'Upload First'}</span>
+                   <motion.span 
+                     className="inline-block ml-2"
+                     animate={musicLibrary.length > 0 ? { x: [0, 5, 0] } : {}}
+                     transition={{ duration: 1.5, repeat: Infinity }}
+                   >
+                     →
+                   </motion.span>
+                 </div>
+                 
+                 {/* Ripple Effect for Active State */}
+                 {musicLibrary.length > 0 && (
+                   <motion.div
+                     className="absolute inset-0 bg-white/10 rounded-2xl"
+                     initial={{ scale: 0, opacity: 0.5 }}
+                     whileTap={{ scale: 1.5, opacity: 0 }}
+                     transition={{ duration: 0.3 }}
+                   />
+                 )}
+                                </motion.div>
+             </div>
+           </motion.div>
 
-          {/* Upgrade Plans Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.9 }}
-            whileHover={{ scale: 1.02, y: -5 }}
-            className="bg-gray-800/40 backdrop-blur-lg p-8 rounded-2xl border border-gray-700/50 hover:border-orange-500/50 transition-all duration-300"
-          >
-            <div className="text-center">
-              <motion.div 
-                className="inline-block p-4 bg-gradient-to-br from-orange-500/20 to-red-500/20 rounded-xl mb-4"
-                whileHover={{ rotate: 5, scale: 1.05 }}
-              >
-                <Star className="h-8 w-8 text-orange-400" />
-              </motion.div>
-              <h3 className="text-2xl font-bold text-white mb-3">Upgrade Plans</h3>
-              <p className="text-gray-300 mb-6 leading-relaxed">
-                Unlock premium features with<br />
-                unlimited uploads, advanced AI,<br />
-                and priority support.
-              </p>
-              <ul className="text-sm text-gray-400 mb-6 space-y-2">
-                <li className="flex items-center justify-center">
-                  <div className="w-2 h-2 bg-orange-400 rounded-full mr-2"></div>
-                  Unlimited song uploads
-                </li>
-                <li className="flex items-center justify-center">
-                  <div className="w-2 h-2 bg-red-400 rounded-full mr-2"></div>
-                  Advanced AI recommendations
-                </li>
-                <li className="flex items-center justify-center">
-                  <div className="w-2 h-2 bg-yellow-400 rounded-full mr-2"></div>
-                  Priority customer support
-                </li>
-              </ul>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setCurrentView('pricing')}
-                className="w-full py-3 px-6 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 rounded-xl font-semibold text-white transition-all duration-300 flex items-center justify-center space-x-2"
-              >
-                <span>View Plans</span>
-                <span>→</span>
-              </motion.button>
-            </div>
-          </motion.div>
-        </div>
-
+           {/* Upgrade Plans Card */}
+           <motion.div
+             initial={{ opacity: 0, x: 50 }}
+             animate={{ opacity: 1, x: 0 }}
+             transition={{ delay: 1.2 }}
+             whileHover={{ 
+               scale: 1.02, 
+               y: -10,
+               transition: { type: "spring", damping: 20 }
+             }}
+             onClick={() => setCurrentView('pricing')}
+             onKeyDown={(e) => e.key === 'Enter' && setCurrentView('pricing')}
+             tabIndex={0}
+             role="button"
+             aria-label="View upgrade plans for premium features"
+             className="group relative cursor-pointer focus:outline-none focus:ring-4 focus:ring-orange-500/50 rounded-3xl"
+           >
+                           <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-red-600 rounded-3xl blur-xl opacity-25 group-hover:opacity-40 transition-opacity duration-500" />
+              <div className="relative bg-gradient-to-br from-gray-900/90 to-black/90 backdrop-blur-xl rounded-3xl border border-white/10 p-8 overflow-hidden h-full flex flex-col">
+               {/* Card Background Effect */}
+               <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-red-500/5 group-hover:from-orange-500/10 group-hover:to-red-500/10 transition-all duration-500" />
+               
+               {/* Icon */}
+               <motion.div 
+                 className="w-20 h-20 mx-auto mb-6 bg-gradient-to-r from-orange-500 to-red-600 rounded-2xl flex items-center justify-center shadow-2xl group-hover:shadow-orange-500/25 transition-all duration-300"
+                 whileHover={{ rotate: [0, -5, 5, 0], scale: 1.1 }}
+               >
+                 <Star className="h-10 w-10 text-white" />
+               </motion.div>
+               
+               {/* Content */}
+               <h3 className="text-3xl font-bold mb-4 bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent">
+                 Upgrade Plans
+               </h3>
+               <p className="text-gray-300 text-lg leading-relaxed mb-6">
+                 Unlock premium features with unlimited uploads, advanced AI, and priority support.
+               </p>
+               
+                             {/* Features */}
+               <div className="space-y-2 text-sm text-gray-400 mb-6 flex-grow">
+                  <div className="flex items-center">
+                    <div className="w-2 h-2 bg-orange-400 rounded-full mr-3" />
+                    <span>Unlimited song uploads</span>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="w-2 h-2 bg-red-400 rounded-full mr-3" />
+                    <span>Advanced AI recommendations</span>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="w-2 h-2 bg-yellow-400 rounded-full mr-3" />
+                    <span>Priority customer support</span>
+                  </div>
+                </div>
+               
+               {/* Enhanced Button */}
+               <motion.div 
+                 className="relative bg-gradient-to-r from-orange-500 to-red-600 rounded-2xl p-4 text-center font-semibold text-white group-hover:from-orange-400 group-hover:to-red-500 transition-all duration-300 overflow-hidden cursor-pointer"
+                 whileHover={{ scale: 1.02, y: -2 }}
+                 whileTap={{ scale: 0.98 }}
+               >
+                 {/* Shimmer Effect */}
+                 <motion.div
+                   className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12"
+                   initial={{ x: '-100%' }}
+                   whileHover={{ x: '200%' }}
+                   transition={{ duration: 0.6 }}
+                 />
+                 
+                 <div className="relative z-10 flex items-center justify-center">
+                   <span>View Plans</span>
+                   <motion.span 
+                     className="inline-block ml-2"
+                     animate={{ x: [0, 5, 0] }}
+                     transition={{ duration: 1.5, repeat: Infinity }}
+                   >
+                     →
+                   </motion.span>
+                 </div>
+                 
+                 {/* Ripple Effect */}
+                 <motion.div
+                   className="absolute inset-0 bg-white/10 rounded-2xl"
+                   initial={{ scale: 0, opacity: 0.5 }}
+                   whileTap={{ scale: 1.5, opacity: 0 }}
+                   transition={{ duration: 0.3 }}
+                 />
+               </motion.div>
+             </div>
+           </motion.div>
+         </motion.div>
+        
         {/* AI Status Indicator */}
         {aiInsights.readyForRecommendations && (
           <motion.div
@@ -1649,71 +1802,282 @@ export default function MusicRecognitionApp() {
         }}
       />
 
-      {/* Enhanced Mini Player */}
+      {/* Revolutionary Music Player - Fixed at bottom */}
       <AnimatePresence>
         {currentTrack && (
-          <motion.div 
-            initial={{ y: 100 }}
-            animate={{ y: 0 }}
-            exit={{ y: 100 }}
-            className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-xl border-t border-purple-500/20 p-4 z-50"
+          <motion.div
+            initial={{ y: 120, opacity: 0, scale: 0.95 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 120, opacity: 0, scale: 0.95 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="fixed bottom-6 left-6 right-6 z-50"
           >
-            <div className="flex items-center justify-between max-w-6xl mx-auto">
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-                  <Music className="h-6 w-6" />
-                </div>
-                <div>
-                  <h4 className="font-semibold">{currentTrack.name}</h4>
-                  <p className="text-gray-400 text-sm">
-                    {formatTime(currentTime)} / {formatTime(duration)}
-                  </p>
-                </div>
-              </div>
+            {/* Main Player Container */}
+            <div className="bg-gradient-to-br from-black/80 via-gray-900/90 to-purple-900/80 backdrop-blur-3xl rounded-3xl shadow-2xl border border-white/10 overflow-hidden">
+              {/* Ambient Glow Effect */}
+              <div className="absolute inset-0 bg-gradient-to-r from-pink-500/20 via-purple-500/20 to-blue-500/20 animate-pulse opacity-60" />
               
-              <div className="flex items-center space-x-4">
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={goToPreviousSong}
-                  className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors"
-                >
-                  <SkipBack className="h-5 w-5" />
-                </motion.button>
-                
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={togglePlayPause}
-                  className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center hover:from-purple-400 hover:to-pink-400 transition-all duration-300"
-                >
-                  {isPlaying ? (
-                    <Pause className="h-6 w-6" />
-                  ) : (
-                    <Play className="h-6 w-6" />
-                  )}
-                </motion.button>
-                
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={goToNextSong}
-                  className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors"
-                >
-                  <SkipForward className="h-5 w-5" />
-                </motion.button>
+              {/* Progress Bar - Top of player */}
+              <div className="relative">
+                <div className="h-2 bg-white/10 cursor-pointer group relative overflow-hidden">
+                  <motion.div 
+                    className="h-full bg-gradient-to-r from-pink-400 via-purple-500 to-blue-500 relative"
+                    style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+                    initial={{ width: 0 }}
+                  >
+                    {/* Shimmer effect */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
+                  </motion.div>
+                  
+                  {/* Progress handle */}
+                  <motion.div 
+                    className="absolute top-1/2 transform -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-300"
+                    style={{ left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+                    whileHover={{ scale: 1.2 }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-pink-400 to-purple-500 rounded-full animate-pulse" />
+                  </motion.div>
+                </div>
               </div>
-            </div>
-            
-            {/* Enhanced Progress Bar */}
-            <div className="mt-4">
-              <div className="w-full bg-gray-700 rounded-full h-2 relative overflow-hidden">
-                <motion.div 
-                  className="absolute inset-0 bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full"
-                  style={{ width: `${progress}%` }}
-                  transition={{ duration: 0.1 }}
-                />
-                <div className="absolute inset-0 bg-gradient-to-r from-purple-500/30 to-pink-500/30 rounded-full opacity-50" />
+
+              {/* Player Content */}
+              <div className={`transition-all duration-300 ${isPlayerMinimized ? 'p-3' : 'p-6'}`}>
+                <div className="grid grid-cols-3 items-center gap-4">
+                  {/* Left Section - Song Info & Artwork */}
+                  <div className="flex items-center space-x-4 min-w-0">
+                    {/* Album Art Placeholder */}
+                    <motion.div 
+                      className={`${isPlayerMinimized ? 'w-12 h-12' : 'w-16 h-16'} bg-gradient-to-br from-pink-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-xl relative overflow-hidden transition-all duration-300`}
+                      animate={{ rotate: isPlaying ? 360 : 0 }}
+                      transition={{ duration: 20, repeat: isPlaying ? Infinity : 0, ease: "linear" }}
+                    >
+                      <Music className={`${isPlayerMinimized ? 'h-6 w-6' : 'h-8 w-8'} text-white transition-all duration-300`} />
+                      {isPlaying && (
+                        <motion.div 
+                          className="absolute inset-0 bg-white/20"
+                          animate={{ 
+                            background: [
+                              "radial-gradient(circle at 30% 40%, rgba(255,255,255,0.3) 0%, transparent 50%)",
+                              "radial-gradient(circle at 70% 40%, rgba(255,255,255,0.3) 0%, transparent 50%)",
+                              "radial-gradient(circle at 30% 40%, rgba(255,255,255,0.3) 0%, transparent 50%)"
+                            ]
+                          }}
+                          transition={{ duration: 2, repeat: Infinity }}
+                        />
+                      )}
+                    </motion.div>
+                    
+                    {/* Song Details */}
+                    <div className="flex-1 min-w-0">
+                      <motion.h3 
+                        className={`${isPlayerMinimized ? 'text-lg' : 'text-xl'} font-bold text-white truncate ${isPlayerMinimized ? 'mb-0' : 'mb-1'} transition-all duration-300`}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                      >
+                        {currentTrack.name}
+                      </motion.h3>
+                      {!isPlayerMinimized && (
+                        <div className="flex items-center space-x-3 text-gray-300">
+                          <div className="flex items-center space-x-2">
+                            <Volume2 className="h-4 w-4" />
+                            <span className="text-sm font-medium">
+                              {formatTime(currentTime)} / {formatTime(duration)}
+                            </span>
+                          </div>
+                          {isPlaying && (
+                            <motion.div 
+                              className="flex space-x-1 items-center"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                            >
+                              {[...Array(4)].map((_, i) => (
+                                <motion.div
+                                  key={i}
+                                  className="w-1 bg-gradient-to-t from-pink-500 to-purple-400 rounded-full"
+                                  animate={{
+                                    height: [4, 12, 8, 16, 6],
+                                  }}
+                                  transition={{
+                                    duration: 1.2,
+                                    repeat: Infinity,
+                                    delay: i * 0.1,
+                                    ease: "easeInOut"
+                                  }}
+                                />
+                              ))}
+                            </motion.div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Center Section - Previous, Play Button & Skip */}
+                  <div className="flex justify-center items-center space-x-4">
+                    {/* Previous Song Button */}
+                    <motion.button
+                      whileHover={{ scale: 1.1, y: -2 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={goToPreviousSong}
+                      className={`group relative ${isPlayerMinimized ? 'p-2' : 'p-3'} rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 transition-all duration-300 shadow-lg hover:shadow-xl`}
+                    >
+                      <SkipBack className={`${isPlayerMinimized ? 'h-4 w-4' : 'h-5 w-5'} text-gray-300 group-hover:text-white transition-colors`} />
+                      <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-pink-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </motion.button>
+
+                    {/* Main Play/Pause Button */}
+                    <motion.button
+                      whileHover={{ scale: 1.05, y: -3 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={togglePlayPause}
+                      className={`relative group ${isPlayerMinimized ? 'p-3' : 'p-4'} rounded-3xl bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 shadow-2xl hover:shadow-pink-500/25 transition-all duration-300`}
+                    >
+                      {/* Button glow effect */}
+                      <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-pink-500 to-purple-600 blur-lg opacity-50 group-hover:opacity-75 transition-opacity" />
+                      
+                      {/* Button content */}
+                      <div className="relative z-10">
+                        <AnimatePresence mode="wait">
+                          {isPlaying ? (
+                            <motion.div
+                              key="pause"
+                              initial={{ scale: 0, rotate: -90 }}
+                              animate={{ scale: 1, rotate: 0 }}
+                              exit={{ scale: 0, rotate: 90 }}
+                              transition={{ duration: 0.2 }}
+                            >
+                              <Pause className={`${isPlayerMinimized ? 'h-5 w-5' : 'h-7 w-7'} text-white transition-all duration-300`} />
+                            </motion.div>
+                          ) : (
+                            <motion.div
+                              key="play"
+                              initial={{ scale: 0, rotate: -90 }}
+                              animate={{ scale: 1, rotate: 0 }}
+                              exit={{ scale: 0, rotate: 90 }}
+                              transition={{ duration: 0.2 }}
+                            >
+                              <Play className={`${isPlayerMinimized ? 'h-5 w-5' : 'h-7 w-7'} text-white ml-1 transition-all duration-300`} />
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                      
+                      {/* Ripple effect */}
+                      <motion.div
+                        className="absolute inset-0 rounded-3xl border-2 border-white/30"
+                        animate={{
+                          scale: isPlaying ? [1, 1.2, 1] : 1,
+                          opacity: isPlaying ? [0.7, 0, 0.7] : 0.7,
+                        }}
+                        transition={{
+                          duration: 2,
+                          repeat: isPlaying ? Infinity : 0,
+                          ease: "easeInOut"
+                        }}
+                      />
+                    </motion.button>
+
+                    {/* Skip Forward Button */}
+                    <motion.button
+                      whileHover={{ scale: 1.1, y: -2 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={goToNextSong}
+                      className={`group relative ${isPlayerMinimized ? 'p-2' : 'p-3'} rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 transition-all duration-300 shadow-lg hover:shadow-xl`}
+                    >
+                      <SkipForward className={`${isPlayerMinimized ? 'h-4 w-4' : 'h-5 w-5'} text-gray-300 group-hover:text-white transition-colors`} />
+                      <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-pink-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </motion.button>
+                  </div>
+
+                  {/* Right Section - Other Control Buttons */}
+                  <div className={`flex items-center justify-end ${isPlayerMinimized ? 'space-x-3' : 'space-x-6'}`}>
+                    {/* Minimize/Maximize Button */}
+                    <motion.button
+                      whileHover={{ scale: 1.1, y: -2 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setIsPlayerMinimized(!isPlayerMinimized)}
+                      className="group relative p-2 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 transition-all duration-300 shadow-lg hover:shadow-xl"
+                    >
+                      {isPlayerMinimized ? (
+                        <Maximize2 className="h-4 w-4 text-gray-300 group-hover:text-white transition-colors" />
+                      ) : (
+                        <Minimize2 className="h-4 w-4 text-gray-300 group-hover:text-white transition-colors" />
+                      )}
+                      <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </motion.button>
+
+                    {/* Shuffle Mode Toggle */}
+                    <motion.button
+                      whileHover={{ scale: 1.1, y: -2 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={handleShuffleModeToggle}
+                      className={`group relative ${isPlayerMinimized ? 'p-2' : 'p-3'} rounded-2xl backdrop-blur-sm border transition-all duration-300 shadow-lg hover:shadow-xl ${
+                        isShuffleMode 
+                          ? 'bg-gradient-to-r from-pink-500/20 to-purple-500/20 border-pink-500/50' 
+                          : 'bg-white/10 hover:bg-white/20 border-white/20'
+                      }`}
+                    >
+                      <Shuffle className={`${isPlayerMinimized ? 'h-4 w-4' : 'h-5 w-5'} transition-colors ${
+                        isShuffleMode ? 'text-pink-400' : 'text-gray-300 group-hover:text-white'
+                      }`} />
+                      {isShuffleMode && (
+                        <motion.div
+                          className="absolute inset-0 rounded-2xl bg-gradient-to-r from-pink-500/30 to-purple-500/30"
+                          animate={{ opacity: [0.3, 0.6, 0.3] }}
+                          transition={{ duration: 2, repeat: Infinity }}
+                        />
+                      )}
+                    </motion.button>
+                  </div>
+                </div>
+
+                {/* Compact Rating System - Hidden when minimized */}
+                {!isPlayerMinimized && (
+                  <motion.div 
+                    className="mt-4 border-t border-white/10 pt-3"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ delay: 0.2 }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <Star className="h-4 w-4 text-yellow-400" />
+                        <span className="text-sm text-gray-300">Rate:</span>
+                        <div className="flex space-x-1">
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => (
+                            <motion.button
+                              key={rating}
+                              whileHover={{ scale: 1.2 }}
+                              whileTap={{ scale: 0.9 }}
+                              onClick={() => rateTrack(currentTrack!.id, rating)}
+                              className={`w-6 h-6 rounded-lg text-xs font-bold transition-all duration-200 ${
+                                currentTrack?.rating === rating
+                                  ? 'bg-yellow-500 text-black shadow-lg'
+                                  : currentTrack?.rating && rating <= currentTrack.rating
+                                  ? 'bg-yellow-600/80 text-white'
+                                  : 'bg-white/10 hover:bg-white/20 text-gray-400 hover:text-white'
+                              }`}
+                            >
+                              {rating}
+                            </motion.button>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {currentTrack?.rating && (
+                        <motion.span 
+                          className="text-sm px-2 py-1 rounded-lg bg-yellow-500/20 text-yellow-300"
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                        >
+                          {currentTrack.rating}/10
+                        </motion.span>
+                      )}
+                    </div>
+
+                  </motion.div>
+                )}
               </div>
             </div>
           </motion.div>
