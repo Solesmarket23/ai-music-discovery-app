@@ -779,7 +779,7 @@ export default function MusicRecognitionApp() {
 
   // Revolutionary Landing Page Component - Apple-Beating Design
   const renderLandingPage = () => (
-    <div className="min-h-screen flex items-start justify-center relative overflow-hidden pt-16 pb-8">
+    <div className="min-h-screen flex items-start justify-center relative pt-16 pb-8">
       {/* Floating Navigation Buttons */}
       <div className="fixed top-6 right-6 z-50 flex flex-col space-y-3">
         {/* Settings Button */}
@@ -1192,7 +1192,7 @@ export default function MusicRecognitionApp() {
               <div className="space-y-2 text-sm text-gray-400 mb-4">
                 <div className="flex items-center">
                   <div className="w-2 h-2 bg-pink-400 rounded-full mr-3" />
-                  <span>Batch upload up to 200 files</span>
+                  <span>Batch upload up to 1,000 files</span>
                 </div>
                 <div className="flex items-center">
                   <div className="w-2 h-2 bg-purple-400 rounded-full mr-3" />
@@ -1559,7 +1559,7 @@ export default function MusicRecognitionApp() {
             >
               <Upload className="mx-auto mb-4 h-16 w-16 text-purple-400" />
               <h3 className="text-2xl font-semibold mb-2">Upload Your Music Library</h3>
-              <p className="text-gray-300">Drag & drop your MP3 files or click to browse (up to 200 files)</p>
+              <p className="text-gray-300">Drag & drop your MP3 files or click to browse (up to 1,000 files)</p>
               <div className="mt-4 text-sm text-gray-400">
                 {musicLibrary.length > 0 && `${musicLibrary.length} songs uploaded`}
               </div>
