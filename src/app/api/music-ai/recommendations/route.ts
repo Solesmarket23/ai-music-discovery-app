@@ -131,7 +131,7 @@ Recommend 5 songs using the most comprehensive analysis possible.
 
 Return ONLY a JSON array with the indices (1-based) of recommended songs, like: [1, 3, 7, 12, 15]
 `;
-    }`;
+    }
 
     const { text } = await generateText({
       model: openai('gpt-4-turbo'),

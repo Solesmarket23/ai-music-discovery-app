@@ -109,7 +109,7 @@ export default function MusicRecognitionApp() {
     setAiInsights({
       totalRatedSongs: ratedSongs.length,
       patterns: ratedSongs.length > 5 ? ['Energetic beats', 'Melodic hooks', 'Vocal harmonies'] : [],
-      readyForRecommendations: ratedSongs.length >= 10
+      readyForRecommendations: ratedSongs.length >= 20
     });
   }, [musicLibrary]);
 
@@ -154,6 +154,11 @@ export default function MusicRecognitionApp() {
     }
     
     setMusicLibrary(prev => [...prev, ...newTracks]);
+    
+    // Automatically navigate to library after successful upload
+    if (newTracks.length > 0) {
+      setCurrentView('library');
+    }
   };
 
   // Audio controls
@@ -358,9 +363,9 @@ export default function MusicRecognitionApp() {
 
   // Landing page with animated background
   const renderLandingPage = () => (
-    <div className="relative flex flex-col items-center justify-center min-h-screen p-8 overflow-hidden">
+    <div className="relative flex flex-col items-center justify-center h-screen p-4 overflow-hidden">
       {/* Top Navigation Bar */}
-      <div className="absolute top-8 right-8 flex items-center space-x-4 z-20">
+      <div className="absolute top-4 right-4 flex items-center space-x-3 z-20">
         {/* Settings Button */}
         <motion.button
           initial={{ opacity: 0, scale: 0.8, y: -20 }}
@@ -369,11 +374,11 @@ export default function MusicRecognitionApp() {
           whileHover={{ scale: 1.05, y: -2 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => setCurrentView('settings')}
-          className="bg-gradient-to-r from-gray-600/90 to-gray-700/90 backdrop-blur-xl text-white px-4 py-2 rounded-full shadow-lg hover:shadow-gray-500/25 transition-all duration-300 border border-white/10"
+          className="bg-gradient-to-r from-gray-600/90 to-gray-700/90 backdrop-blur-xl text-white px-3 py-2 rounded-full shadow-lg hover:shadow-gray-500/25 transition-all duration-300 border border-white/10"
         >
           <div className="flex items-center space-x-2">
             <Settings className="h-4 w-4" />
-            <span className="font-semibold">Settings</span>
+            <span className="font-semibold text-sm">Settings</span>
           </div>
         </motion.button>
         
@@ -385,14 +390,15 @@ export default function MusicRecognitionApp() {
           whileHover={{ scale: 1.05, y: -2 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => setCurrentView('pricing')}
-          className="bg-gradient-to-r from-orange-500/90 to-red-500/90 backdrop-blur-xl text-white px-4 py-2 rounded-full shadow-lg hover:shadow-orange-500/25 transition-all duration-300 border border-white/10"
+          className="bg-gradient-to-r from-orange-500/90 to-red-500/90 backdrop-blur-xl text-white px-3 py-2 rounded-full shadow-lg hover:shadow-orange-500/25 transition-all duration-300 border border-white/10"
         >
           <div className="flex items-center space-x-2">
             <Star className="h-4 w-4" />
-            <span className="font-semibold">Upgrade</span>
+            <span className="font-semibold text-sm">Upgrade</span>
           </div>
         </motion.button>
       </div>
+
       {/* Animated Background Particles */}
       <div className="absolute inset-0 overflow-hidden">
         {Array.from({ length: 50 }).map((_, i) => (
@@ -418,17 +424,17 @@ export default function MusicRecognitionApp() {
       </div>
 
       {/* Sound Visualization Bars */}
-      <div className="absolute bottom-0 left-0 right-0 flex items-end justify-center h-32 px-8">
+      <div className="absolute bottom-0 left-0 right-0 flex items-end justify-center h-16 px-8">
         {soundVisualization.map((height, index) => (
           <motion.div
             key={index}
             className="bg-gradient-to-t from-purple-500/50 to-pink-500/50 mx-1 rounded-t-lg"
             style={{
-              width: '4px',
-              height: `${Math.max(height * 0.8, 10)}px`,
+              width: '3px',
+              height: `${Math.max(height * 0.4, 5)}px`,
             }}
             animate={{
-              height: `${Math.max(height * 0.8, 10)}px`,
+              height: `${Math.max(height * 0.4, 5)}px`,
             }}
             transition={{
               duration: 0.1,
@@ -441,21 +447,21 @@ export default function MusicRecognitionApp() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-center max-w-4xl relative z-10"
+        className="text-center max-w-6xl relative z-10"
       >
         <motion.div 
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2 }}
-          className="inline-block p-4 rounded-[2rem] bg-gradient-to-br from-pink-500/15 via-purple-500/20 to-blue-500/15 backdrop-blur-xl border border-white/20 mb-8"
+          className="inline-block p-2 rounded-xl bg-gradient-to-br from-pink-500/15 via-purple-500/20 to-blue-500/15 backdrop-blur-xl border border-white/20 mb-3"
         >
-          <motion.div className="text-6xl">🎵</motion.div>
+          <motion.div className="text-3xl">🎵</motion.div>
         </motion.div>
         <motion.h1 
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.3 }}
-          className="text-7xl font-bold mb-2 bg-gradient-to-r from-pink-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent"
+          className="text-4xl font-bold mb-1 bg-gradient-to-r from-pink-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent"
         >
           AI Music
         </motion.h1>
@@ -463,7 +469,7 @@ export default function MusicRecognitionApp() {
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.4 }}
-          className="text-7xl font-bold mb-6 bg-gradient-to-r from-orange-400 via-yellow-400 to-red-400 bg-clip-text text-transparent"
+          className="text-4xl font-bold mb-2 bg-gradient-to-r from-orange-400 via-yellow-400 to-red-400 bg-clip-text text-transparent"
         >
           Discovery
         </motion.h2>
@@ -471,7 +477,7 @@ export default function MusicRecognitionApp() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
-          className="text-xl text-gray-300 mb-4 leading-relaxed"
+          className="text-base text-gray-300 mb-2 leading-relaxed"
         >
           Unleash the power of AI to discover your <span className="text-pink-400 font-semibold">perfect music taste</span>
         </motion.p>
@@ -479,7 +485,7 @@ export default function MusicRecognitionApp() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
-          className="flex items-center justify-center space-x-4 mb-12 text-sm text-gray-400"
+          className="flex items-center justify-center space-x-4 mb-4 text-sm text-gray-400"
         >
           <span className="flex items-center"><span className="w-2 h-2 bg-pink-500 rounded-full mr-2"></span>Rate</span>
           <span className="text-gray-600">•</span>
@@ -488,301 +494,245 @@ export default function MusicRecognitionApp() {
           <span className="flex items-center"><span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>Discover</span>
         </motion.div>
         
-                 {/* Action Cards */}
-         <motion.div 
-           className="relative grid md:grid-cols-3 gap-8 max-w-5xl mx-auto items-stretch"
-           initial={{ opacity: 0, y: 30 }}
-           animate={{ opacity: 1, y: 0 }}
-           transition={{ delay: 0.7, staggerChildren: 0.2 }}
-         >
+        {/* Action Cards */}
+        <motion.div 
+          className="relative grid md:grid-cols-3 gap-4 max-w-5xl mx-auto items-stretch"
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7, staggerChildren: 0.2 }}
+        >
 
-                     {/* Upload Songs Card */}
-           <motion.div
-             initial={{ opacity: 0, x: -50 }}
-             animate={{ opacity: 1, x: 0 }}
-             transition={{ delay: 0.8 }}
-             whileHover={{ 
-               scale: 1.02, 
-               y: -10,
-               transition: { type: "spring", damping: 20 }
-             }}
-             onClick={() => setCurrentView('upload')}
-             onKeyDown={(e) => e.key === 'Enter' && setCurrentView('upload')}
-             tabIndex={0}
-             role="button"
-             aria-label="Upload your music collection to get started"
-             className="group relative cursor-pointer focus:outline-none focus:ring-4 focus:ring-pink-500/50 rounded-3xl"
-           >
-                         <div className="absolute inset-0 bg-gradient-to-r from-pink-500 to-purple-600 rounded-3xl blur-xl opacity-25 group-hover:opacity-40 transition-opacity duration-500" />
-            <div className="relative bg-gradient-to-br from-gray-900/90 to-black/90 backdrop-blur-xl rounded-3xl border border-white/10 p-8 overflow-hidden h-full flex flex-col">
+          {/* Upload Songs Card */}
+          <motion.div
+            initial={{ opacity: 0, x: -50 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.8 }}
+            whileHover={{ 
+              scale: 1.02, 
+              y: -5,
+              transition: { type: "spring", damping: 20 }
+            }}
+            onClick={() => setCurrentView('upload')}
+            onKeyDown={(e) => e.key === 'Enter' && setCurrentView('upload')}
+            tabIndex={0}
+            role="button"
+            aria-label="Upload your music collection to get started"
+            className="group relative cursor-pointer focus:outline-none focus:ring-4 focus:ring-pink-500/50 rounded-2xl"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-pink-500 to-purple-600 rounded-2xl blur-xl opacity-25 group-hover:opacity-40 transition-opacity duration-500" />
+            <div className="relative bg-gradient-to-br from-gray-900/90 to-black/90 backdrop-blur-xl rounded-2xl border border-white/10 p-4 overflow-hidden h-full flex flex-col">
               {/* Card Background Effect */}
               <div className="absolute inset-0 bg-gradient-to-br from-pink-500/5 to-purple-500/5 group-hover:from-pink-500/10 group-hover:to-purple-500/10 transition-all duration-500" />
               
               {/* Icon */}
               <motion.div 
-                className="w-20 h-20 mx-auto mb-6 bg-gradient-to-r from-pink-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-2xl group-hover:shadow-pink-500/25 transition-all duration-300"
+                className="w-12 h-12 mx-auto mb-3 bg-gradient-to-r from-pink-500 to-purple-600 rounded-xl flex items-center justify-center shadow-xl group-hover:shadow-pink-500/25 transition-all duration-300"
                 whileHover={{ rotate: [0, -5, 5, 0], scale: 1.1 }}
               >
-                <Upload className="h-10 w-10 text-white" />
+                <Upload className="h-6 w-6 text-white" />
               </motion.div>
               
               {/* Content */}
-              <h3 className="text-3xl font-bold mb-4 bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
+              <h3 className="text-lg font-bold mb-2 bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
                 Upload Songs
               </h3>
-              <p className="text-gray-300 text-lg leading-relaxed mb-6">
-                Start your journey by uploading your music collection. 
-                Support for MP3, WAV, and M4A files.
+              <p className="text-gray-300 text-sm leading-relaxed mb-3">
+                Start your journey by uploading your music collection. Support for MP3, WAV, and M4A files.
               </p>
               
-                             {/* Features */}
-               <div className="space-y-2 text-sm text-gray-400 mb-6 flex-grow">
-                 <div className="flex items-center">
-                   <div className="w-2 h-2 bg-pink-400 rounded-full mr-3" />
-                   <span>Batch upload up to 200 files</span>
-                 </div>
-                 <div className="flex items-center">
-                   <div className="w-2 h-2 bg-purple-400 rounded-full mr-3" />
-                   <span>Instant audio processing</span>
-                 </div>
-                 <div className="flex items-center">
-                   <div className="w-2 h-2 bg-blue-400 rounded-full mr-3" />
-                   <span>Smart file organization</span>
-                 </div>
-               </div>
+              {/* Features */}
+              <div className="space-y-1 text-xs text-gray-400 mb-3 flex-grow">
+                <div className="flex items-center">
+                  <div className="w-1.5 h-1.5 bg-pink-400 rounded-full mr-2" />
+                  <span>Batch upload up to 200 files</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-1.5 h-1.5 bg-purple-400 rounded-full mr-2" />
+                  <span>Instant audio processing</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-1.5 h-1.5 bg-blue-400 rounded-full mr-2" />
+                  <span>Smart file organization</span>
+                </div>
+              </div>
               
-                             {/* Enhanced Button with Micro-interactions */}
-               <motion.div 
-                 className="relative bg-gradient-to-r from-pink-500 to-purple-600 rounded-2xl p-4 text-center font-semibold text-white group-hover:from-pink-400 group-hover:to-purple-500 transition-all duration-300 overflow-hidden cursor-pointer"
-                 whileHover={{ scale: 1.02, y: -2 }}
-                 whileTap={{ scale: 0.98 }}
-               >
-                 {/* Shimmer Effect */}
-                 <motion.div
-                   className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12"
-                   initial={{ x: '-100%' }}
-                   whileHover={{ x: '200%' }}
-                   transition={{ duration: 0.6 }}
-                 />
-                 
-                 <div className="relative z-10 flex items-center justify-center">
-                   <span>Get Started</span>
-                   <motion.span 
-                     className="inline-block ml-2"
-                     animate={{ x: [0, 5, 0] }}
-                     transition={{ duration: 1.5, repeat: Infinity }}
-                   >
-                     →
-                   </motion.span>
-                 </div>
-                 
-                 {/* Ripple Effect */}
-                 <motion.div
-                   className="absolute inset-0 bg-white/10 rounded-2xl"
-                   initial={{ scale: 0, opacity: 0.5 }}
-                   whileTap={{ scale: 1.5, opacity: 0 }}
-                   transition={{ duration: 0.3 }}
-                 />
-               </motion.div>
+              {/* Enhanced Button */}
+              <motion.div 
+                className="relative bg-gradient-to-r from-pink-500 to-purple-600 rounded-xl p-2 text-center font-semibold text-white text-sm group-hover:from-pink-400 group-hover:to-purple-500 transition-all duration-300 overflow-hidden cursor-pointer"
+                whileHover={{ scale: 1.02, y: -2 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <div className="relative z-10 flex items-center justify-center">
+                  <span>Get Started</span>
+                  <motion.span 
+                    className="inline-block ml-2"
+                    animate={{ x: [0, 3, 0] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                  >
+                    →
+                  </motion.span>
+                </div>
+              </motion.div>
             </div>
           </motion.div>
 
-                     {/* View Library Card */}
-           <motion.div
-             initial={{ opacity: 0, x: 50 }}
-             animate={{ opacity: 1, x: 0 }}
-             transition={{ delay: 1 }}
-             whileHover={musicLibrary.length > 0 ? { 
-               scale: 1.02, 
-               y: -10,
-               transition: { type: "spring", damping: 20 }
-             } : {}}
-             onClick={() => musicLibrary.length > 0 && setCurrentView('library')}
-             onKeyDown={(e) => e.key === 'Enter' && musicLibrary.length > 0 && setCurrentView('library')}
-             tabIndex={musicLibrary.length > 0 ? 0 : -1}
-             role="button"
-             aria-label={musicLibrary.length > 0 ? `View your music library with ${musicLibrary.length} songs` : 'Music library is empty. Upload songs first.'}
-             aria-disabled={musicLibrary.length === 0}
-             className={`group relative rounded-3xl focus:outline-none ${
-               musicLibrary.length > 0 
-                 ? 'cursor-pointer focus:ring-4 focus:ring-blue-500/50' 
-                 : 'opacity-50 cursor-not-allowed'
-             }`}
+          {/* View Library Card */}
+          <motion.div
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 1 }}
+            whileHover={musicLibrary.length > 0 ? { 
+              scale: 1.02, 
+              y: -5,
+              transition: { type: "spring", damping: 20 }
+            } : {}}
+            onClick={() => musicLibrary.length > 0 && setCurrentView('library')}
+            onKeyDown={(e) => e.key === 'Enter' && musicLibrary.length > 0 && setCurrentView('library')}
+            tabIndex={musicLibrary.length > 0 ? 0 : -1}
+            role="button"
+            aria-label={musicLibrary.length > 0 ? `View your music library with ${musicLibrary.length} songs` : 'Music library is empty. Upload songs first.'}
+            aria-disabled={musicLibrary.length === 0}
+            className={`group relative rounded-2xl focus:outline-none ${
+              musicLibrary.length > 0 
+                ? 'cursor-pointer focus:ring-4 focus:ring-blue-500/50' 
+                : 'opacity-50 cursor-not-allowed'
+            }`}
           >
-                         <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-3xl blur-xl opacity-25 group-hover:opacity-40 transition-opacity duration-500" />
-            <div className="relative bg-gradient-to-br from-gray-900/90 to-black/90 backdrop-blur-xl rounded-3xl border border-white/10 p-8 overflow-hidden h-full flex flex-col">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl blur-xl opacity-25 group-hover:opacity-40 transition-opacity duration-500" />
+            <div className="relative bg-gradient-to-br from-gray-900/90 to-black/90 backdrop-blur-xl rounded-2xl border border-white/10 p-4 overflow-hidden h-full flex flex-col">
               {/* Card Background Effect */}
               <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5 group-hover:from-blue-500/10 group-hover:to-indigo-500/10 transition-all duration-500" />
               
               {/* Icon */}
               <motion.div 
-                className="w-20 h-20 mx-auto mb-6 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-2xl group-hover:shadow-blue-500/25 transition-all duration-300"
+                className="w-12 h-12 mx-auto mb-3 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-xl group-hover:shadow-blue-500/25 transition-all duration-300"
                 whileHover={{ rotate: [0, -5, 5, 0], scale: 1.1 }}
               >
-                <Music className="h-10 w-10 text-white" />
+                <Music className="h-6 w-6 text-white" />
               </motion.div>
               
               {/* Content */}
-              <h3 className="text-3xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
+              <h3 className="text-lg font-bold mb-2 bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
                 Music Library
               </h3>
-              <p className="text-gray-300 text-lg leading-relaxed mb-6">
-                {musicLibrary.length > 0 
-                  ? `Explore your collection of ${musicLibrary.length} songs and rate them for AI learning.`
-                  : 'Your music library is empty. Upload some songs first to get started.'
-                }
+              <p className="text-gray-300 text-sm leading-relaxed mb-3">
+                Explore your collection of {musicLibrary.length} songs and rate them for AI learning.
               </p>
               
-                             {/* Features */}
-               <div className="space-y-2 text-sm text-gray-400 mb-6 flex-grow">
-                 <div className="flex items-center">
-                   <div className="w-2 h-2 bg-blue-400 rounded-full mr-3" />
-                   <span>{musicLibrary.length > 0 ? 'Rate and organize' : 'Waiting for music'}</span>
-                 </div>
-                 <div className="flex items-center">
-                   <div className="w-2 h-2 bg-indigo-400 rounded-full mr-3" />
-                   <span>{aiInsights.totalRatedSongs > 0 ? `${aiInsights.totalRatedSongs} songs rated` : 'AI learning ready'}</span>
-                 </div>
-                 <div className="flex items-center">
-                   <div className="w-2 h-2 bg-purple-400 rounded-full mr-3" />
-                   <span>{aiInsights.readyForRecommendations ? 'AI recommendations ready!' : 'Discover new favorites'}</span>
-                 </div>
-               </div>
-              
-                             {/* Enhanced Button with Smart States */}
-               <motion.div 
-                 className={`relative rounded-2xl p-4 text-center font-semibold text-white transition-all duration-300 overflow-hidden ${
-                   musicLibrary.length > 0
-                     ? 'bg-gradient-to-r from-blue-500 to-indigo-600 group-hover:from-blue-400 group-hover:to-indigo-500 cursor-pointer'
-                     : 'bg-gradient-to-r from-gray-600 to-gray-700 cursor-not-allowed'
-                 }`}
-                 whileHover={musicLibrary.length > 0 ? { scale: 1.02, y: -2 } : { scale: 1.01 }}
-                 whileTap={musicLibrary.length > 0 ? { scale: 0.98 } : {}}
-               >
-                 {/* Shimmer Effect for Active State */}
-                 {musicLibrary.length > 0 && (
-                   <motion.div
-                     className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12"
-                     initial={{ x: '-100%' }}
-                     whileHover={{ x: '200%' }}
-                     transition={{ duration: 0.6 }}
-                   />
-                 )}
-                 
-                 <div className="relative z-10 flex items-center justify-center">
-                   <span>{musicLibrary.length > 0 ? 'View Library' : 'Upload First'}</span>
-                   <motion.span 
-                     className="inline-block ml-2"
-                     animate={musicLibrary.length > 0 ? { x: [0, 5, 0] } : {}}
-                     transition={{ duration: 1.5, repeat: Infinity }}
-                   >
-                     →
-                   </motion.span>
-                 </div>
-                 
-                 {/* Ripple Effect for Active State */}
-                 {musicLibrary.length > 0 && (
-                   <motion.div
-                     className="absolute inset-0 bg-white/10 rounded-2xl"
-                     initial={{ scale: 0, opacity: 0.5 }}
-                     whileTap={{ scale: 1.5, opacity: 0 }}
-                     transition={{ duration: 0.3 }}
-                   />
-                 )}
-                                </motion.div>
-             </div>
-           </motion.div>
-
-           {/* Upgrade Plans Card */}
-           <motion.div
-             initial={{ opacity: 0, x: 50 }}
-             animate={{ opacity: 1, x: 0 }}
-             transition={{ delay: 1.2 }}
-             whileHover={{ 
-               scale: 1.02, 
-               y: -10,
-               transition: { type: "spring", damping: 20 }
-             }}
-             onClick={() => setCurrentView('pricing')}
-             onKeyDown={(e) => e.key === 'Enter' && setCurrentView('pricing')}
-             tabIndex={0}
-             role="button"
-             aria-label="View upgrade plans for premium features"
-             className="group relative cursor-pointer focus:outline-none focus:ring-4 focus:ring-orange-500/50 rounded-3xl"
-           >
-                           <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-red-600 rounded-3xl blur-xl opacity-25 group-hover:opacity-40 transition-opacity duration-500" />
-              <div className="relative bg-gradient-to-br from-gray-900/90 to-black/90 backdrop-blur-xl rounded-3xl border border-white/10 p-8 overflow-hidden h-full flex flex-col">
-               {/* Card Background Effect */}
-               <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-red-500/5 group-hover:from-orange-500/10 group-hover:to-red-500/10 transition-all duration-500" />
-               
-               {/* Icon */}
-               <motion.div 
-                 className="w-20 h-20 mx-auto mb-6 bg-gradient-to-r from-orange-500 to-red-600 rounded-2xl flex items-center justify-center shadow-2xl group-hover:shadow-orange-500/25 transition-all duration-300"
-                 whileHover={{ rotate: [0, -5, 5, 0], scale: 1.1 }}
-               >
-                 <Star className="h-10 w-10 text-white" />
-               </motion.div>
-               
-               {/* Content */}
-               <h3 className="text-3xl font-bold mb-4 bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent">
-                 Upgrade Plans
-               </h3>
-               <p className="text-gray-300 text-lg leading-relaxed mb-6">
-                 Unlock premium features with unlimited uploads, advanced AI, and priority support.
-               </p>
-               
-                             {/* Features */}
-               <div className="space-y-2 text-sm text-gray-400 mb-6 flex-grow">
-                  <div className="flex items-center">
-                    <div className="w-2 h-2 bg-orange-400 rounded-full mr-3" />
-                    <span>Unlimited song uploads</span>
-                  </div>
-                  <div className="flex items-center">
-                    <div className="w-2 h-2 bg-red-400 rounded-full mr-3" />
-                    <span>Advanced AI recommendations</span>
-                  </div>
-                  <div className="flex items-center">
-                    <div className="w-2 h-2 bg-yellow-400 rounded-full mr-3" />
-                    <span>Priority customer support</span>
-                  </div>
+              {/* Features */}
+              <div className="space-y-1 text-xs text-gray-400 mb-3 flex-grow">
+                <div className="flex items-center">
+                  <div className="w-1.5 h-1.5 bg-blue-400 rounded-full mr-2" />
+                  <span>{aiInsights.readyForRecommendations ? 'AI recommendations ready!' : 'Discover new favorites'}</span>
                 </div>
-               
-               {/* Enhanced Button */}
-               <motion.div 
-                 className="relative bg-gradient-to-r from-orange-500 to-red-600 rounded-2xl p-4 text-center font-semibold text-white group-hover:from-orange-400 group-hover:to-red-500 transition-all duration-300 overflow-hidden cursor-pointer"
-                 whileHover={{ scale: 1.02, y: -2 }}
-                 whileTap={{ scale: 0.98 }}
-               >
-                 {/* Shimmer Effect */}
-                 <motion.div
-                   className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12"
-                   initial={{ x: '-100%' }}
-                   whileHover={{ x: '200%' }}
-                   transition={{ duration: 0.6 }}
-                 />
-                 
-                 <div className="relative z-10 flex items-center justify-center">
-                   <span>View Plans</span>
-                   <motion.span 
-                     className="inline-block ml-2"
-                     animate={{ x: [0, 5, 0] }}
-                     transition={{ duration: 1.5, repeat: Infinity }}
-                   >
-                     →
-                   </motion.span>
-                 </div>
-                 
-                 {/* Ripple Effect */}
-                 <motion.div
-                   className="absolute inset-0 bg-white/10 rounded-2xl"
-                   initial={{ scale: 0, opacity: 0.5 }}
-                   whileTap={{ scale: 1.5, opacity: 0 }}
-                   transition={{ duration: 0.3 }}
-                 />
-               </motion.div>
-             </div>
-           </motion.div>
-         </motion.div>
+                <div className="flex items-center">
+                  <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full mr-2" />
+                  <span>Rate and organize</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-1.5 h-1.5 bg-purple-400 rounded-full mr-2" />
+                  <span>{musicLibrary.length} songs loaded</span>
+                </div>
+              </div>
+              
+              {/* Enhanced Button */}
+              <motion.div 
+                className={`relative rounded-xl p-2 text-center font-semibold text-sm transition-all duration-300 overflow-hidden ${
+                  musicLibrary.length > 0
+                    ? 'bg-gradient-to-r from-blue-500 to-indigo-600 group-hover:from-blue-400 group-hover:to-indigo-500 cursor-pointer text-white'
+                    : 'bg-gradient-to-r from-gray-600 to-gray-700 cursor-not-allowed text-gray-300'
+                }`}
+                whileHover={musicLibrary.length > 0 ? { scale: 1.02, y: -2 } : { scale: 1.01 }}
+                whileTap={musicLibrary.length > 0 ? { scale: 0.98 } : {}}
+              >
+                <div className="relative z-10 flex items-center justify-center">
+                  <span>{musicLibrary.length > 0 ? 'View Library' : 'Upload First'}</span>
+                  <motion.span 
+                    className="inline-block ml-2"
+                    animate={musicLibrary.length > 0 ? { x: [0, 3, 0] } : {}}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                  >
+                    →
+                  </motion.span>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+
+          {/* Upgrade Plans Card */}
+          <motion.div
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 1.2 }}
+            whileHover={{ 
+              scale: 1.02, 
+              y: -5,
+              transition: { type: "spring", damping: 20 }
+            }}
+            onClick={() => setCurrentView('pricing')}
+            onKeyDown={(e) => e.key === 'Enter' && setCurrentView('pricing')}
+            tabIndex={0}
+            role="button"
+            aria-label="View upgrade plans for premium features"
+            className="group relative cursor-pointer focus:outline-none focus:ring-4 focus:ring-orange-500/50 rounded-2xl"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-red-600 rounded-2xl blur-xl opacity-25 group-hover:opacity-40 transition-opacity duration-500" />
+            <div className="relative bg-gradient-to-br from-gray-900/90 to-black/90 backdrop-blur-xl rounded-2xl border border-white/10 p-4 overflow-hidden h-full flex flex-col">
+              {/* Card Background Effect */}
+              <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-red-500/5 group-hover:from-orange-500/10 group-hover:to-red-500/10 transition-all duration-500" />
+              
+              {/* Icon */}
+              <motion.div 
+                className="w-12 h-12 mx-auto mb-3 bg-gradient-to-r from-orange-500 to-red-600 rounded-xl flex items-center justify-center shadow-xl group-hover:shadow-orange-500/25 transition-all duration-300"
+                whileHover={{ rotate: [0, -5, 5, 0], scale: 1.1 }}
+              >
+                <Star className="h-6 w-6 text-white" />
+              </motion.div>
+              
+              {/* Content */}
+              <h3 className="text-lg font-bold mb-2 bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent">
+                Upgrade Plans
+              </h3>
+              <p className="text-gray-300 text-sm leading-relaxed mb-3">
+                Unlock premium features with unlimited uploads, advanced AI, and priority support.
+              </p>
+              
+              {/* Features */}
+              <div className="space-y-1 text-xs text-gray-400 mb-3 flex-grow">
+                <div className="flex items-center">
+                  <div className="w-1.5 h-1.5 bg-orange-400 rounded-full mr-2" />
+                  <span>Unlimited song uploads</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-1.5 h-1.5 bg-red-400 rounded-full mr-2" />
+                  <span>Advanced AI recommendations</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full mr-2" />
+                  <span>Priority customer support</span>
+                </div>
+              </div>
+              
+              {/* Enhanced Button */}
+              <motion.div 
+                className="relative bg-gradient-to-r from-orange-500 to-red-600 rounded-xl p-2 text-center font-semibold text-white text-sm group-hover:from-orange-400 group-hover:to-red-500 transition-all duration-300 overflow-hidden cursor-pointer"
+                whileHover={{ scale: 1.02, y: -2 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <div className="relative z-10 flex items-center justify-center">
+                  <span>View Plans</span>
+                  <motion.span 
+                    className="inline-block ml-2"
+                    animate={{ x: [0, 3, 0] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                  >
+                    →
+                  </motion.span>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+        </motion.div>
         
         {/* AI Status Indicator */}
         {aiInsights.readyForRecommendations && (
@@ -790,10 +740,10 @@ export default function MusicRecognitionApp() {
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 1.2 }}
-            className="inline-flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30 rounded-full backdrop-blur-lg"
+            className="inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30 rounded-full backdrop-blur-lg mt-3"
           >
-            <Brain className="h-5 w-5 text-green-400" />
-            <span className="text-green-400 font-semibold">AI Ready for Recommendations!</span>
+            <Brain className="h-4 w-4 text-green-400" />
+            <span className="text-green-400 font-semibold text-sm">AI Ready for Recommendations!</span>
           </motion.div>
         )}
       </motion.div>
@@ -973,7 +923,7 @@ export default function MusicRecognitionApp() {
                       </span>
                     ) : (
                       <span className="px-4 py-2 bg-yellow-500/20 text-yellow-400 rounded-full text-sm">
-                        Rate {10 - aiInsights.totalRatedSongs} more songs to unlock AI
+                        Rate {20 - aiInsights.totalRatedSongs} more songs to unlock AI
                       </span>
                     )}
                   </div>
@@ -981,7 +931,7 @@ export default function MusicRecognitionApp() {
                 <div className="mt-4 w-full bg-gray-700 rounded-full h-2">
                   <motion.div 
                     initial={{ width: 0 }}
-                    animate={{ width: `${(aiInsights.totalRatedSongs / 10) * 100}%` }}
+                    animate={{ width: `${(aiInsights.totalRatedSongs / 20) * 100}%` }}
                     className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-500"
                   />
                 </div>
@@ -1027,20 +977,22 @@ export default function MusicRecognitionApp() {
                           </div>
                         </div>
                         
-                        <div className="flex items-center space-x-2">
-                          {[1, 2, 3, 4, 5].map((star) => (
+                        <div className="flex items-center space-x-1">
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => (
                             <motion.button
-                              key={star}
+                              key={rating}
                               whileHover={{ scale: 1.2 }}
                               whileTap={{ scale: 0.8 }}
-                              onClick={() => rateTrack(track.id, star)}
-                              className={`transition-all duration-200 ${
-                                (track.rating || 0) >= star ? 'text-yellow-400' : 'text-gray-600 hover:text-gray-400'
+                              onClick={() => rateTrack(track.id, rating)}
+                              className={`w-7 h-7 rounded-full text-xs font-bold transition-all duration-200 ${
+                                track.rating === rating
+                                  ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-black'
+                                  : track.rating && rating <= track.rating
+                                  ? 'bg-gradient-to-r from-yellow-500 to-orange-600 text-black'
+                                  : 'bg-gray-600 hover:bg-gray-500 text-white'
                               }`}
                             >
-                              <Star className="h-5 w-5" fill={
-                                (track.rating || 0) >= star ? 'currentColor' : 'none'
-                              } />
+                              {rating}
                             </motion.button>
                           ))}
                         </div>
@@ -1087,20 +1039,22 @@ export default function MusicRecognitionApp() {
                           Duration: {formatTime(track.duration || 0)}
                         </p>
                         
-                        <div className="flex items-center justify-center space-x-1">
-                          {[1, 2, 3, 4, 5].map((star) => (
+                        <div className="flex items-center justify-center space-x-1 flex-wrap gap-1">
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => (
                             <motion.button
-                              key={star}
+                              key={rating}
                               whileHover={{ scale: 1.2 }}
                               whileTap={{ scale: 0.8 }}
-                              onClick={() => rateTrack(track.id, star)}
-                              className={`transition-all duration-200 ${
-                                (track.rating || 0) >= star ? 'text-yellow-400' : 'text-gray-600 hover:text-gray-400'
+                              onClick={() => rateTrack(track.id, rating)}
+                              className={`w-6 h-6 rounded-full text-xs font-bold transition-all duration-200 ${
+                                track.rating === rating
+                                  ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-black'
+                                  : track.rating && rating <= track.rating
+                                  ? 'bg-gradient-to-r from-yellow-500 to-orange-600 text-black'
+                                  : 'bg-gray-600 hover:bg-gray-500 text-white'
                               }`}
                             >
-                              <Star className="h-4 w-4" fill={
-                                (track.rating || 0) >= star ? 'currentColor' : 'none'
-                              } />
+                              {rating}
                             </motion.button>
                           ))}
                         </div>
