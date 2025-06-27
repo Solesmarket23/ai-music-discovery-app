@@ -46,6 +46,7 @@ export default function MusicRecognitionApp() {
   // Advanced Settings State
   const [aiTrainingMode, setAiTrainingMode] = useState<'rating' | 'audio' | 'listening' | 'genre' | 'tempo' | 'hybrid'>('rating');
   const [settingsTheme, setSettingsTheme] = useState<'auto' | 'dark' | 'light'>('auto');
+  const [selectedThemeOption, setSelectedThemeOption] = useState<'default' | 'neon' | 'sunset' | 'ocean' | 'forest' | 'royal'>('default');
   const [settingsView, setSettingsView] = useState<'simple' | 'advanced'>('simple');
   const [autoSave, setAutoSave] = useState(true);
   const [settingsSearch, setSettingsSearch] = useState('');
@@ -71,6 +72,7 @@ export default function MusicRecognitionApp() {
       const settings = {
         aiTrainingMode,
         settingsTheme,
+        selectedThemeOption,
         visualMode,
         isShuffleMode,
         autoSave,
@@ -84,7 +86,7 @@ export default function MusicRecognitionApp() {
         console.error('Failed to save settings:', error);
       }
     }
-  }, [aiTrainingMode, settingsTheme, visualMode, isShuffleMode, autoSave, settingsPreset]);
+  }, [aiTrainingMode, settingsTheme, selectedThemeOption, visualMode, isShuffleMode, autoSave, settingsPreset]);
 
   // Save music library to localStorage whenever it changes
   useEffect(() => {
@@ -114,11 +116,14 @@ export default function MusicRecognitionApp() {
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
         setAiTrainingMode(settings.aiTrainingMode || 'rating');
-        setSettingsTheme(settings.settingsTheme || 'auto');
+        const savedTheme = settings.settingsTheme || 'auto';
+        setSettingsTheme(savedTheme);
+        setSelectedThemeOption(settings.selectedThemeOption || 'default');
         setVisualMode(settings.visualMode || 'immersive');
         setIsShuffleMode(settings.isShuffleMode || false);
         setAutoSave(settings.autoSave !== undefined ? settings.autoSave : true);
         setSettingsPreset(settings.settingsPreset || 'custom');
+        
         console.log('📂 Settings loaded from localStorage');
       }
 
@@ -159,6 +164,13 @@ export default function MusicRecognitionApp() {
       console.error('Failed to load settings or music library:', error);
     }
   }, []);
+
+  // Apply theme after settings are loaded
+  useEffect(() => {
+    console.log('⚙️ Settings theme changed, applying:', settingsTheme);
+    applyTheme(settingsTheme);
+    applyThemeOption(selectedThemeOption);
+  }, [settingsTheme, selectedThemeOption]);
 
   // Effect to update AI insights
   useEffect(() => {
@@ -505,9 +517,72 @@ export default function MusicRecognitionApp() {
     setTimeout(() => setShowToast(null), 3000);
   };
 
+  // Theme implementation with actual visual changes
+  const applyTheme = (theme: 'auto' | 'dark' | 'light') => {
+    const root = document.documentElement;
+    
+    if (theme === 'auto') {
+      const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      root.classList.toggle('dark', systemPrefersDark);
+      root.classList.toggle('light', !systemPrefersDark);
+    } else {
+      root.classList.toggle('dark', theme === 'dark');
+      root.classList.toggle('light', theme === 'light');
+    }
+    
+    // Apply theme option
+    applyThemeOption(selectedThemeOption);
+    
+    // Store theme preference
+    localStorage.setItem('theme-preference', theme);
+  };
+
+  // Apply theme color scheme
+  const applyThemeOption = (themeOption: 'default' | 'neon' | 'sunset' | 'ocean' | 'forest' | 'royal') => {
+    const root = document.documentElement;
+    
+    console.log('🎨 Applying theme option:', themeOption);
+    
+    // Remove all theme classes
+    root.classList.remove('theme-neon', 'theme-sunset', 'theme-ocean', 'theme-forest', 'theme-royal');
+    
+    // Apply the selected theme option (except default)
+    if (themeOption !== 'default') {
+      root.classList.add(`theme-${themeOption}`);
+      console.log('✅ Applied theme class:', `theme-${themeOption}`);
+    } else {
+      console.log('✅ Applied default theme (no additional class)');
+    }
+    
+    // Debug: Log current classes
+    console.log('🔍 Current document classes:', root.className);
+  };
+
+  // Handle theme option changes
+  const handleThemeOptionChange = (themeOption: 'default' | 'neon' | 'sunset' | 'ocean' | 'forest' | 'royal') => {
+    setSelectedThemeOption(themeOption);
+    applyThemeOption(themeOption);
+    setHasUnsavedChanges(true);
+    
+    const themeNames = { 
+      default: 'Default', 
+      neon: 'Neon Cyber', 
+      sunset: 'Sunset Vibes', 
+      ocean: 'Ocean Depths', 
+      forest: 'Forest Dreams',
+      royal: 'Royal Purple'
+    };
+    setShowToast({ 
+      message: `Theme changed to ${themeNames[themeOption]}`, 
+      show: true 
+    });
+    setTimeout(() => setShowToast(null), 2500);
+  };
+
   // Settings change handlers with feedback
   const handleThemeChange = (theme: 'auto' | 'dark' | 'light') => {
     setSettingsTheme(theme);
+    applyTheme(theme);
     setHasUnsavedChanges(true);
     
     const themeNames = { auto: 'Auto', dark: 'Dark Mode', light: 'Light Mode' };
@@ -967,7 +1042,10 @@ export default function MusicRecognitionApp() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white">
+          <div className="min-h-screen" style={{ 
+        background: 'linear-gradient(135deg, var(--bg-primary), var(--bg-secondary))',
+        color: 'var(--text-primary)'
+      }}>
       
       {/* Main Content */}
       <AnimatePresence mode="wait">
@@ -1851,6 +1929,43 @@ export default function MusicRecognitionApp() {
                                 </div>
                               </div>
 
+                              {/* Theme Color Schemes */}
+                              <div>
+                                <h4 className="font-semibold text-white mb-3 flex items-center">
+                                  <Sparkles className="h-4 w-4 mr-2 text-pink-400" />
+                                  Color Themes
+                                </h4>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {[
+                                    { theme: 'default', label: 'Default', colors: 'from-gray-600 to-gray-700', icon: '🎨' },
+                                    { theme: 'neon', label: 'Neon Cyber', colors: 'from-green-400 to-blue-500', icon: '⚡' },
+                                    { theme: 'sunset', label: 'Sunset Vibes', colors: 'from-orange-500 to-red-500', icon: '🌅' },
+                                    { theme: 'ocean', label: 'Ocean Depths', colors: 'from-blue-500 to-cyan-500', icon: '🌊' },
+                                    { theme: 'forest', label: 'Forest Dreams', colors: 'from-green-500 to-emerald-600', icon: '🌲' },
+                                    { theme: 'royal', label: 'Royal Purple', colors: 'from-purple-500 to-violet-600', icon: '👑' }
+                                  ].map((themeOption) => (
+                                    <motion.button
+                                      key={themeOption.theme}
+                                      whileHover={{ scale: 1.02 }}
+                                      whileTap={{ scale: 0.98 }}
+                                      onClick={() => handleThemeOptionChange(themeOption.theme as any)}
+                                      className={`p-3 rounded-xl transition-all text-left ${
+                                        selectedThemeOption === themeOption.theme
+                                          ? `bg-gradient-to-r ${themeOption.colors} text-white shadow-lg`
+                                          : 'bg-gray-800/50 text-gray-300 hover:bg-gray-700'
+                                      }`}
+                                    >
+                                      <div className="flex items-center space-x-2">
+                                        <span className="text-lg">{themeOption.icon}</span>
+                                        <div>
+                                          <div className="text-xs font-semibold">{themeOption.label}</div>
+                                        </div>
+                                      </div>
+                                    </motion.button>
+                                  ))}
+                                </div>
+                              </div>
+
                               {/* Modern Toggle Switches */}
                               <div className="space-y-4">
                                 <div className="flex items-center justify-between">
@@ -2626,7 +2741,7 @@ export default function MusicRecognitionApp() {
                           className="text-yellow-400"
                           whileHover={{ scale: 1.1 }}
                         >
-                          4-6: It's OK 😐
+                          4-6: It&apos;s OK 😐
                         </motion.span>
                         <motion.span 
                           className="text-green-400"
