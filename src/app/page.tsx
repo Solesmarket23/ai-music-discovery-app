@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Upload, Play, Pause, SkipForward, Shuffle, Star, Brain, Music, Volume2, Minimize2, Maximize2 } from "lucide-react";
+import { Upload, Play, Pause, SkipForward, SkipBack, Shuffle, Star, Brain, Music, Volume2, Minimize2, Maximize2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface MusicTrack {
@@ -46,10 +46,14 @@ export default function MusicRecognitionApp() {
   const [isPlayerMinimized, setIsPlayerMinimized] = useState(false);
   const [ratingFeedback, setRatingFeedback] = useState<{ rating: number; show: boolean } | null>(null);
   const [showToast, setShowToast] = useState<{ message: string; show: boolean } | null>(null);
+  const [playHistory, setPlayHistory] = useState<string[]>([]); // Track order of played songs
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
 
   // Local Storage Functions for Persistent Ratings
   const saveRatingsToStorage = (tracks: MusicTrack[]) => {
@@ -94,20 +98,152 @@ export default function MusicRecognitionApp() {
     }));
   };
 
-  // Advanced Analytics & Performance Tracking
+  // Setup Web Audio API for real-time audio analysis
+  const setupAudioAnalysis = async () => {
+    if (!audioRef.current || audioContextRef.current || sourceRef.current) return;
+
+    try {
+      // Create audio context - handle user interaction requirement
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      // Resume context if suspended (required for user interaction policy)
+      if (audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
+      }
+      
+      // Create analyser node with better settings for real-time visualization
+      analyserRef.current = audioContextRef.current.createAnalyser();
+      analyserRef.current.fftSize = 512; // Higher resolution for better frequency analysis
+      analyserRef.current.minDecibels = -90;
+      analyserRef.current.maxDecibels = -10;
+      analyserRef.current.smoothingTimeConstant = 0.85; // Smoother transitions
+      
+      // Create source from audio element (only once per audio element)
+      sourceRef.current = audioContextRef.current.createMediaElementSource(audioRef.current);
+      
+      // Connect: source -> analyser -> destination
+      sourceRef.current.connect(analyserRef.current);
+      analyserRef.current.connect(audioContextRef.current.destination);
+      
+      console.log('🎵 Audio analysis setup complete - Context state:', audioContextRef.current.state);
+    } catch (error) {
+      console.error('Failed to setup audio analysis:', error);
+      // Reset refs on error to allow retry
+      audioContextRef.current = null;
+      analyserRef.current = null;
+      sourceRef.current = null;
+    }
+  };
+
+  // Real-time audio visualization using Web Audio API
+  const updateVisualization = () => {
+    if (!analyserRef.current || !isPlaying || !audioContextRef.current) return;
+
+    const bufferLength = analyserRef.current.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    analyserRef.current.getByteFrequencyData(dataArray);
+
+    // Group frequency data into 20 visualization bars
+    const barCount = 20;
+    const barSize = Math.floor(bufferLength / barCount);
+    const visualData: number[] = [];
+
+    // Calculate overall loudness for adaptive scaling
+    let totalEnergy = 0;
+    for (let i = 0; i < bufferLength; i++) {
+      totalEnergy += dataArray[i];
+    }
+    const averageLevel = totalEnergy / bufferLength;
+
+    for (let i = 0; i < barCount; i++) {
+      const start = i * barSize;
+      const end = start + barSize;
+      
+      // Calculate average amplitude for this frequency range
+      let sum = 0;
+      for (let j = start; j < end; j++) {
+        sum += dataArray[j];
+      }
+      const average = sum / barSize;
+      
+      // Adaptive scaling based on overall loudness
+      // Quiet songs: more sensitive scaling
+      // Loud songs: prevent clipping at 100%
+      let scaledValue;
+      if (averageLevel < 30) {
+        // Very quiet audio - amplify more
+        scaledValue = Math.min((average / 255) * 300, 100);
+      } else if (averageLevel < 60) {
+        // Moderately quiet audio
+        scaledValue = Math.min((average / 255) * 200, 100);
+      } else {
+        // Normal to loud audio
+        scaledValue = Math.min((average / 255) * 120, 100);
+      }
+      
+      // Ensure minimum visibility for very quiet parts
+      if (scaledValue > 0 && scaledValue < 5) {
+        scaledValue = 5;
+      }
+      
+      visualData.push(Math.max(0, scaledValue));
+    }
+
+    setSoundVisualization(visualData);
+    
+    // Debug logging for first few updates
+    if (Math.random() < 0.01) { // Log occasionally
+      console.log('🔊 Audio levels - Average:', averageLevel.toFixed(1), 'Peak:', Math.max(...visualData).toFixed(1));
+    }
+  };
+
+  // Advanced Analytics & Performance Tracking with Real Audio Visualization
   useEffect(() => {
-    const interval = setInterval(() => {
-      // Simulate audio visualization data
+    let animationFrame: number;
+    
+    const animate = () => {
       if (isPlaying) {
-        setSoundVisualization(prev => 
-          prev.map(() => Math.random() * 100)
-        );
+        updateVisualization();
         setUserEngagement(prev => Math.min(prev + 0.1, 100));
       }
-    }, 100);
+      animationFrame = requestAnimationFrame(animate);
+    };
 
-    return () => clearInterval(interval);
+    if (isPlaying) {
+      animate();
+    }
+
+    return () => {
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+      }
+    };
   }, [isPlaying]);
+
+  // Cleanup audio context on unmount
+  useEffect(() => {
+    return () => {
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
+
+  // Reset audio analysis if context gets into bad state
+  const resetAudioAnalysis = () => {
+    console.log('🔄 Resetting audio analysis...');
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+    }
+    audioContextRef.current = null;
+    analyserRef.current = null;
+    sourceRef.current = null;
+    
+    // Retry setup after short delay
+    if (isPlaying && audioRef.current) {
+      setTimeout(() => setupAudioAnalysis(), 500);
+    }
+  };
 
   useEffect(() => {
     if (musicLibrary.length > 0) {
@@ -158,20 +294,48 @@ export default function MusicRecognitionApp() {
   };
 
   // Audio controls
-  const playTrack = (track: MusicTrack) => {
+  const playTrack = async (track: MusicTrack) => {
     console.log('Playing track:', track.name); // Debug log
     if (currentTrack?.id === track.id) {
       if (isPlaying) {
         audioRef.current?.pause();
         setIsPlaying(false);
       } else {
-        audioRef.current?.play();
-        setIsPlaying(true);
+        try {
+          await audioRef.current?.play();
+          setIsPlaying(true);
+          // Setup audio analysis when resuming - ensure audio is playing first
+          setTimeout(() => setupAudioAnalysis(), 200);
+        } catch (error) {
+          console.error('Failed to play audio:', error);
+        }
       }
     } else {
+      // Add current track to history before switching (if there was a current track)
+      if (currentTrack) {
+        setPlayHistory(prev => {
+          const newHistory = prev.filter(id => id !== currentTrack.id); // Remove if already in history
+          return [...newHistory, currentTrack.id]; // Add to end
+        });
+      }
+      
       setCurrentTrack(track);
-      setIsPlaying(true);
       console.log('Set current track:', track.name); // Debug log
+      
+      // Wait for audio element to be ready, then play and setup analysis
+      setTimeout(async () => {
+        try {
+          if (audioRef.current) {
+            await audioRef.current.play();
+            setIsPlaying(true);
+            // Setup audio analysis after audio starts playing
+            setTimeout(() => setupAudioAnalysis(), 300);
+          }
+        } catch (error) {
+          console.error('Failed to play audio:', error);
+          setIsPlaying(false);
+        }
+      }, 100);
     }
   };
 
@@ -260,6 +424,36 @@ export default function MusicRecognitionApp() {
     if (unratedSongs.length > 0) {
       const randomIndex = Math.floor(Math.random() * unratedSongs.length);
       playTrack(unratedSongs[randomIndex]);
+    }
+  };
+
+  // Go to previous song using actual play history
+  const goToPreviousSong = () => {
+    if (playHistory.length > 0 && currentTrack) {
+      // Get the last song from history
+      const lastPlayedId = playHistory[playHistory.length - 1];
+      const lastPlayedTrack = musicLibrary.find(track => track.id === lastPlayedId);
+      
+      if (lastPlayedTrack) {
+        // Remove the last song from history since we're going back to it
+        setPlayHistory(prev => prev.slice(0, -1));
+        
+        // Play the previous song without adding current track to history (to avoid loop)
+        const currentId = currentTrack.id;
+        setCurrentTrack(lastPlayedTrack);
+        setIsPlaying(true);
+        console.log('Going back to previous track:', lastPlayedTrack.name);
+      } else {
+        // Fallback: if no history or track not found, go to previous in library
+        const currentIndex = musicLibrary.findIndex(track => track.id === currentTrack.id);
+        const previousIndex = currentIndex > 0 ? currentIndex - 1 : musicLibrary.length - 1;
+        playTrack(musicLibrary[previousIndex]);
+      }
+    } else if (musicLibrary.length > 0 && currentTrack) {
+      // No history available, fallback to library order
+      const currentIndex = musicLibrary.findIndex(track => track.id === currentTrack.id);
+      const previousIndex = currentIndex > 0 ? currentIndex - 1 : musicLibrary.length - 1;
+      playTrack(musicLibrary[previousIndex]);
     }
   };
 
@@ -1368,8 +1562,20 @@ export default function MusicRecognitionApp() {
                     </div>
                   </div>
 
-                  {/* Center Section - Main Play Button & Skip */}
-                  <div className="flex justify-center items-center space-x-4">
+                  {/* Center Section - Previous, Play Button & Skip */}
+                  <div className="flex justify-center items-center space-x-4 ml-16">
+                    {/* Previous Song Button */}
+                    <motion.button
+                      whileHover={{ scale: 1.1, y: -2 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={goToPreviousSong}
+                      className={`group relative ${isPlayerMinimized ? 'p-2' : 'p-3'} rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 transition-all duration-300 shadow-lg hover:shadow-xl`}
+                    >
+                      <SkipBack className={`${isPlayerMinimized ? 'h-4 w-4' : 'h-5 w-5'} text-gray-300 group-hover:text-white transition-colors`} />
+                      <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-pink-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </motion.button>
+
+                    {/* Main Play/Pause Button */}
                     <motion.button
                       whileHover={{ scale: 1.05, y: -3 }}
                       whileTap={{ scale: 0.95 }}
@@ -1768,11 +1974,36 @@ export default function MusicRecognitionApp() {
         )}
       </AnimatePresence>
 
+      {/* Debug Audio Analysis Info - Remove in production */}
+      {isPlaying && (
+        <div className="fixed bottom-4 right-4 bg-black/80 backdrop-blur-sm text-white p-3 rounded-lg text-xs z-50">
+          <div>Audio Context: {audioContextRef.current?.state || 'None'}</div>
+          <div>Analyser: {analyserRef.current ? '✅' : '❌'}</div>
+          <div>Source: {sourceRef.current ? '✅' : '❌'}</div>
+          <div>Visualization Data Length: {soundVisualization.length}</div>
+          <div>Max Level: {Math.max(...soundVisualization).toFixed(1)}%</div>
+          <div>Avg Level: {(soundVisualization.reduce((a, b) => a + b, 0) / soundVisualization.length).toFixed(1)}%</div>
+        </div>
+      )}
+
       {/* Audio Element */}
       <audio
         ref={audioRef}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
+        onPlay={() => {
+          console.log('🎵 Audio started playing');
+          // Ensure audio analysis is setup when audio actually starts
+          if (!audioContextRef.current || !analyserRef.current) {
+            setTimeout(() => setupAudioAnalysis(), 150);
+          }
+        }}
+        onPause={() => {
+          console.log('⏸️ Audio paused');
+        }}
+        onCanPlay={() => {
+          console.log('✅ Audio can play');
+        }}
         onEnded={() => {
           if (isShuffleMode) shuffleToUnratedSong();
           else setIsPlaying(false);
@@ -1780,8 +2011,10 @@ export default function MusicRecognitionApp() {
         onError={(e) => {
           console.error('Audio error:', e);
           setIsPlaying(false);
+          resetAudioAnalysis(); // Reset on error
         }}
         preload="metadata"
+        crossOrigin="anonymous"
       />
     </div>
   );
