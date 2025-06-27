@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { openai } from 'ai/openai';
-import { generateText } from 'ai';
 
 export async function POST(req: NextRequest) {
   try {
@@ -133,34 +131,14 @@ Return ONLY a JSON array with the indices (1-based) of recommended songs, like: 
 `;
     }
 
-    const { text } = await generateText({
-      model: openai('gpt-4-turbo'),
-      prompt,
-      temperature: 0.3,
-    });
-
-    // Parse the AI response to get recommended indices
-    let recommendedIndices: number[] = [];
-    try {
-      recommendedIndices = JSON.parse(text.trim());
-    } catch (error) {
-      // Fallback: extract numbers from the response
-      const numbers = text.match(/\d+/g);
-      if (numbers) {
-        recommendedIndices = numbers.slice(0, 5).map(n => parseInt(n));
-      }
-    }
-
-    // Convert indices to actual track recommendations
-    const recommendations = recommendedIndices
-      .filter(index => index >= 1 && index <= unratedTracks.length)
-      .map(index => unratedTracks[index - 1])
-      .slice(0, 5);
+    // Temporary fallback recommendation logic (replace with AI later)
+    const shuffledUnrated = [...unratedTracks].sort(() => Math.random() - 0.5);
+    const recommendations = shuffledUnrated.slice(0, 5);
 
     return NextResponse.json({
       success: true,
       recommendations,
-      reasoning: text
+      reasoning: 'Random recommendation fallback'
     });
 
   } catch (error) {

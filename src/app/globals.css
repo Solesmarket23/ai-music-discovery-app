@@ -163,6 +163,42 @@
   animation: shimmer 3s infinite linear;
 }
 
+/* Smooth progress bar animations */
+@keyframes progressPulse {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(236, 72, 153, 0.4), 0 0 30px rgba(139, 92, 246, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(236, 72, 153, 0.6), 0 0 50px rgba(139, 92, 246, 0.5);
+  }
+}
+
+@keyframes waveform {
+  0%, 100% {
+    height: 2px;
+  }
+  50% {
+    height: 12px;
+  }
+}
+
+.progress-glow {
+  animation: progressPulse 2s ease-in-out infinite;
+}
+
+.waveform-bar {
+  animation: waveform 1s ease-in-out infinite alternate;
+}
+
+/* Progress handle hover effect */
+.progress-handle {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.progress-handle:hover {
+  filter: drop-shadow(0 0 15px rgba(236, 72, 153, 0.8));
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 8px;

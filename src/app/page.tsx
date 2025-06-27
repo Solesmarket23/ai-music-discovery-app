@@ -13,6 +13,7 @@ interface MusicTrack {
   duration: number;
   rating?: number;
   analyzed?: boolean;
+  needsReupload?: boolean; // Flag to indicate this track needs file re-upload for playback
 }
 
 interface AIInsights {
@@ -58,6 +59,7 @@ export default function MusicRecognitionApp() {
   const [showToast, setShowToast] = useState<{ message: string; show: boolean } | null>(null);
   const [isPlayerMinimized, setIsPlayerMinimized] = useState(false);
   const [libraryViewMode, setLibraryViewMode] = useState<'list' | 'grid'>('list');
+  const [ratingFeedback, setRatingFeedback] = useState<{ rating: number; show: boolean } | null>(null);
 
   // Refs
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -84,9 +86,30 @@ export default function MusicRecognitionApp() {
     }
   }, [aiTrainingMode, settingsTheme, visualMode, isShuffleMode, autoSave, settingsPreset]);
 
-  // Load settings from localStorage on app start
+  // Save music library to localStorage whenever it changes
   useEffect(() => {
     try {
+      // Create a serializable version of the music library (without File objects)
+      const serializableLibrary = musicLibrary.map(track => ({
+        id: track.id,
+        name: track.name,
+        duration: track.duration,
+        rating: track.rating,
+        analyzed: track.analyzed,
+        // Note: File objects and blob URLs are not saved - they need to be re-uploaded after refresh
+      }));
+      
+      localStorage.setItem('musicAppLibrary', JSON.stringify(serializableLibrary));
+      console.log('💾 Music library metadata saved to localStorage:', serializableLibrary.length, 'songs');
+    } catch (error) {
+      console.error('Failed to save music library:', error);
+    }
+  }, [musicLibrary]);
+
+  // Load settings and music library from localStorage on app start
+  useEffect(() => {
+    try {
+      // Load settings
       const savedSettings = localStorage.getItem('musicAppSettings');
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
@@ -98,8 +121,42 @@ export default function MusicRecognitionApp() {
         setSettingsPreset(settings.settingsPreset || 'custom');
         console.log('📂 Settings loaded from localStorage');
       }
+
+      // Load music library metadata (note: actual files need to be re-uploaded)
+      const savedLibrary = localStorage.getItem('musicAppLibrary');
+      if (savedLibrary) {
+        const libraryData = JSON.parse(savedLibrary);
+        console.log('📚 Found saved music library metadata:', libraryData.length, 'songs');
+        
+        // Create placeholder tracks that show the user what was previously uploaded
+        // These will need the actual files to be re-uploaded to play
+        const placeholderTracks: MusicTrack[] = libraryData.map((savedTrack: any) => ({
+          id: savedTrack.id,
+          name: savedTrack.name,
+          file: null as any, // Placeholder - actual file needed for playback
+          url: '', // Placeholder - actual blob URL needed for playback  
+          duration: savedTrack.duration || 0,
+          rating: savedTrack.rating,
+          analyzed: savedTrack.analyzed,
+          needsReupload: true // Flag to indicate this track needs file re-upload
+        }));
+        
+        setMusicLibrary(placeholderTracks);
+        console.log('🔄 Music library restored from localStorage (files need re-upload for playback)');
+        
+        // Show helpful toast about re-uploading if there are saved tracks
+        if (placeholderTracks.length > 0) {
+          setTimeout(() => {
+            setShowToast({ 
+              message: `📚 Found ${placeholderTracks.length} previously uploaded songs. Re-upload files to restore playback.`, 
+              show: true 
+            });
+            setTimeout(() => setShowToast(null), 6000);
+          }, 1000);
+        }
+      }
     } catch (error) {
-      console.error('Failed to load settings:', error);
+      console.error('Failed to load settings or music library:', error);
     }
   }, []);
 
@@ -135,29 +192,126 @@ export default function MusicRecognitionApp() {
     };
   }, [isPlaying]);
 
-  // File upload handler
+  // File upload handler with duplicate detection
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    
-    const newTracks: MusicTrack[] = [];
-    for (const file of files.slice(0, 200)) {
-      if (file.type.startsWith('audio/')) {
-        const track: MusicTrack = {
-          id: Date.now() + Math.random().toString(),
-          name: file.name.replace(/\.[^/.]+$/, ''),
-          file,
-          url: URL.createObjectURL(file),
-          duration: 0
-        };
-        newTracks.push(track);
+    try {
+      console.log('🚀 handleFileUpload called!', event.target.files);
+      const files = Array.from(event.target.files || []);
+      
+      if (files.length === 0) {
+        console.log('❌ No files selected');
+        return;
       }
-    }
-    
-    setMusicLibrary(prev => [...prev, ...newTracks]);
-    
-    // Automatically navigate to library after successful upload
-    if (newTracks.length > 0) {
-      setCurrentView('library');
+      
+      const newTracks: MusicTrack[] = [];
+      const skippedTracks: string[] = [];
+      
+      // Get existing song names for duplicate detection
+      const existingSongNames = new Set(musicLibrary.map(track => track.name.toLowerCase()));
+      
+      console.log('🔍 Duplicate Detection Debug:');
+      console.log('📚 Existing library songs:', Array.from(existingSongNames));
+      console.log('📥 Files being uploaded:', files.map(f => f.name));
+      
+      for (const file of files.slice(0, 200)) {
+        console.log('📁 File type:', file.type, 'for file:', file.name);
+        if (file.type.startsWith('audio/')) {
+          const songName = file.name.replace(/\.[^/.]+$/, '');
+          const normalizedName = songName.toLowerCase();
+          
+          console.log(`🎵 Processing: "${songName}" -> normalized: "${normalizedName}"`);
+          
+          // Check for duplicates or previously saved tracks that need re-upload
+          const existingTrack = musicLibrary.find(track => track.name.toLowerCase() === normalizedName);
+          
+          if (existingTrack && !existingTrack.needsReupload) {
+            console.log(`❌ DUPLICATE FOUND: "${songName}" already exists in library`);
+            skippedTracks.push(songName);
+            continue; // Skip this track
+          } else if (existingTrack && existingTrack.needsReupload) {
+            console.log(`🔄 RESTORING TRACK: "${songName}" - updating with new file`);
+            // Update the existing track with the new file and remove needsReupload flag
+            existingTrack.file = file;
+            existingTrack.url = URL.createObjectURL(file);
+            existingTrack.needsReupload = false;
+            console.log(`✅ RESTORED: "${songName}" with ratings and metadata intact`);
+            continue; // Don't add as new track, just updated existing
+          }
+          
+          console.log(`✅ NEW SONG: "${songName}" will be added`);
+          
+          const track: MusicTrack = {
+            id: Date.now() + Math.random().toString(),
+            name: songName,
+            file,
+            url: URL.createObjectURL(file),
+            duration: 0
+          };
+          
+          newTracks.push(track);
+          existingSongNames.add(normalizedName); // Add to set to prevent duplicates within this upload
+        } else {
+          console.log(`⚠️ Skipping non-audio file: ${file.name} (type: ${file.type})`);
+        }
+      }
+      
+      // Count restored tracks (tracks that had needsReupload and now have files)
+      const restoredTracks = musicLibrary.filter(track => 
+        files.some(file => file.name.replace(/\.[^/.]+$/, '').toLowerCase() === track.name.toLowerCase()) 
+        && !track.needsReupload
+      );
+      const restoredCount = restoredTracks.length - newTracks.length; // Subtract new tracks to get actual restored count
+
+      // Update the music library with new tracks
+      setMusicLibrary(prev => [...prev, ...newTracks]);
+      
+      console.log('📊 Import Results:');
+      console.log('✅ New tracks to add:', newTracks.length, newTracks.map(t => t.name));
+      console.log('🔄 Restored tracks:', restoredCount);
+      console.log('❌ Skipped duplicates:', skippedTracks.length, skippedTracks);
+      
+      // Show notification with import results
+      let message = '';
+      const totalProcessed = newTracks.length + skippedTracks.length + restoredCount;
+      
+      if (newTracks.length > 0 || restoredCount > 0) {
+        const parts = [];
+        if (newTracks.length > 0) {
+          parts.push(`${newTracks.length} new song${newTracks.length === 1 ? '' : 's'}`);
+        }
+        if (restoredCount > 0) {
+          parts.push(`${restoredCount} song${restoredCount === 1 ? '' : 's'} restored`);
+        }
+        if (skippedTracks.length > 0) {
+          parts.push(`${skippedTracks.length} duplicate${skippedTracks.length === 1 ? '' : 's'} skipped`);
+        }
+        message = `✅ Successfully processed: ${parts.join(', ')}.`;
+      } else if (skippedTracks.length > 0) {
+        message = `⚠️ All ${skippedTracks.length} song${skippedTracks.length === 1 ? '' : 's'} already exist in your library.`;
+      } else {
+        message = '❌ No valid audio files found to import.';
+      }
+      
+      console.log('📱 Showing toast message:', message);
+      
+      // Show the notification
+      setShowToast({ message, show: true });
+      setTimeout(() => setShowToast(null), 4000); // Show for 4 seconds for longer messages
+      
+      // Navigate based on the upload results
+      if (newTracks.length > 0 || restoredCount > 0) {
+        // If new tracks were added or tracks were restored, go to library
+        setCurrentView('library');
+      } else if (skippedTracks.length > 0) {
+        // If only duplicates were found, go to library to show existing songs
+        // Give a short delay to let user see the duplicate notification first
+        setTimeout(() => setCurrentView('library'), 2000);
+      }
+      // If no valid files at all, stay on upload page
+    } catch (error) {
+      console.error('❌ Error in handleFileUpload:', error);
+      setShowToast({ message: '❌ Error processing files. Please try again.', show: true });
+      setTimeout(() => setShowToast(null), 4000);
     }
   };
 
@@ -168,8 +322,19 @@ export default function MusicRecognitionApp() {
         audioRef.current.pause();
         setIsPlaying(false);
       } else {
+        // Check if track needs re-upload
+        if (track.needsReupload) {
+          setShowToast({ 
+            message: '⚠️ Please re-upload this file to play it', 
+            show: true 
+          });
+          setTimeout(() => setShowToast(null), 3000);
+          return;
+        }
+        
         audioRef.current.src = track.url;
         setCurrentTrack(track);
+        console.log('🎵 Set current track:', track.id, track.name);
         try {
           await audioRef.current.play();
           setIsPlaying(true);
@@ -216,12 +381,63 @@ export default function MusicRecognitionApp() {
     }
   };
 
-  const rateTrack = (trackId: string, rating: number) => {
-    setMusicLibrary(prev => prev.map(track => 
-      track.id === trackId 
-        ? { ...track, rating, analyzed: true }
-        : track
-    ));
+  // Rating system with enhanced feedback
+  const rateTrack = async (trackId: string, rating: number) => {
+    // Update the music library
+    setMusicLibrary(prev => {
+      const updatedTracks = prev.map(track => 
+        track.id === trackId 
+          ? { ...track, rating, analyzed: true }
+          : track
+      );
+      return updatedTracks;
+    });
+
+    // Update currentTrack if it's the same track being rated
+    if (currentTrack?.id === trackId) {
+      setCurrentTrack(prev => prev ? { ...prev, rating, analyzed: true } : null);
+    }
+
+    const ratedSongs = musicLibrary.filter(track => track.rating).length + 1;
+    setAiInsights(prev => ({
+      ...prev,
+      totalRatedSongs: ratedSongs,
+      readyForRecommendations: ratedSongs >= 20
+    }));
+
+    // Show immediate visual feedback
+    setRatingFeedback({ rating, show: true });
+    
+    // Show toast notification
+    const ratingMessages = {
+      1: "Skip this! 🚫", 2: "Not great 😑", 3: "Meh... ⚠️",
+      4: "It's okay 😐", 5: "Pretty good 👍", 6: "Nice! 😊",
+      7: "Love it! ❤️", 8: "Amazing! 🔥", 9: "Incredible! ⭐", 10: "Masterpiece! 🎵✨"
+    };
+    setShowToast({ 
+      message: `Rated ${rating}/10 - ${ratingMessages[rating as keyof typeof ratingMessages]}`, 
+      show: true 
+    });
+
+    // Clear feedback after animation
+    setTimeout(() => {
+      setRatingFeedback(null);
+    }, 1000);
+
+    // Clear toast after delay
+    setTimeout(() => {
+      setShowToast(null);
+    }, 3000);
+
+    // Immediate AI learning feedback
+    console.log(`🎵 Song rated ${rating}/10 - AI learning from your taste!`);
+
+    // Auto-shuffle to next unrated song after rating (with delay for satisfaction)
+    if (isShuffleMode) {
+      setTimeout(() => {
+        shuffleToUnratedSong();
+      }, 1500); // Give user time to see the rating feedback
+    }
   };
 
   const formatTime = (time: number) => {
@@ -496,7 +712,7 @@ export default function MusicRecognitionApp() {
         
         {/* Action Cards */}
         <motion.div 
-          className="relative grid md:grid-cols-3 gap-4 max-w-5xl mx-auto items-stretch"
+          className="relative grid md:grid-cols-3 gap-4 max-w-6xl mx-auto items-stretch"
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.7, staggerChildren: 0.2 }}
@@ -956,23 +1172,34 @@ export default function MusicRecognitionApp() {
                           <motion.button
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.9 }}
-                            onClick={() => playTrack(track)}
+                            onClick={() => track.needsReupload ? setCurrentView('upload') : playTrack(track)}
                             className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 ${
-                              currentTrack?.id === track.id && isPlaying
+                              track.needsReupload
+                                ? 'bg-gradient-to-r from-yellow-500 to-orange-500'
+                                : currentTrack?.id === track.id && isPlaying
                                 ? 'bg-gradient-to-r from-pink-500 to-purple-500'
                                 : 'bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-400 hover:to-blue-400'
                             }`}
                           >
-                            {currentTrack?.id === track.id && isPlaying ? (
+                            {track.needsReupload ? (
+                              <Upload className="h-6 w-6" />
+                            ) : currentTrack?.id === track.id && isPlaying ? (
                               <Pause className="h-6 w-6" />
                             ) : (
                               <Play className="h-6 w-6" />
                             )}
                           </motion.button>
                           <div>
-                            <h3 className="font-semibold text-lg group-hover:text-purple-300 transition-colors">{track.name}</h3>
+                            <div className="flex items-center space-x-2">
+                              <h3 className="font-semibold text-lg group-hover:text-purple-300 transition-colors">{track.name}</h3>
+                              {track.needsReupload && (
+                                <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs rounded-full">
+                                  Needs Re-upload
+                                </span>
+                              )}
+                            </div>
                             <p className="text-gray-400 text-sm">
-                              Duration: {formatTime(track.duration || 0)}
+                              {track.needsReupload ? 'Click to re-upload file' : `Duration: ${formatTime(track.duration || 0)}`}
                             </p>
                           </div>
                         </div>
@@ -1019,24 +1246,33 @@ export default function MusicRecognitionApp() {
                           <motion.button
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.9 }}
-                            onClick={() => playTrack(track)}
+                            onClick={() => track.needsReupload ? setCurrentView('upload') : playTrack(track)}
                             className={`w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300 ${
-                              currentTrack?.id === track.id && isPlaying
+                              track.needsReupload
+                                ? 'bg-gradient-to-r from-yellow-500 to-orange-500'
+                                : currentTrack?.id === track.id && isPlaying
                                 ? 'bg-gradient-to-r from-pink-500 to-purple-500'
                                 : 'bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-400 hover:to-blue-400'
                             }`}
                           >
-                            {currentTrack?.id === track.id && isPlaying ? (
+                            {track.needsReupload ? (
+                              <Upload className="h-7 w-7" />
+                            ) : currentTrack?.id === track.id && isPlaying ? (
                               <Pause className="h-7 w-7" />
                             ) : (
                               <Play className="h-7 w-7" />
                             )}
                           </motion.button>
+                          {track.needsReupload && (
+                            <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs rounded-full">
+                              Re-upload
+                            </span>
+                          )}
                         </div>
                         
                         <h3 className="font-semibold text-lg mb-2 group-hover:text-purple-300 transition-colors truncate">{track.name}</h3>
                         <p className="text-gray-400 text-sm mb-4">
-                          Duration: {formatTime(track.duration || 0)}
+                          {track.needsReupload ? 'Click to re-upload file' : `Duration: ${formatTime(track.duration || 0)}`}
                         </p>
                         
                         <div className="flex items-center justify-center space-x-1 flex-wrap gap-1">
@@ -1786,22 +2022,44 @@ export default function MusicRecognitionApp() {
                 )}
               </AnimatePresence>
 
-              {/* Toast Notification */}
-              <AnimatePresence>
-                {showToast?.show && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 50, scale: 0.9 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 50, scale: 0.9 }}
-                    className="fixed bottom-8 right-8 bg-green-500/90 backdrop-blur-xl text-white px-6 py-4 rounded-2xl shadow-lg border border-green-400/30 z-50"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-green-300 rounded-full animate-pulse" />
-                      <span className="font-medium">{showToast.message}</span>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Global Toast Notification - Shows on all views */}
+      <AnimatePresence>
+        {showToast?.show && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.9 }}
+            className={`fixed bottom-8 right-8 backdrop-blur-xl text-white px-6 py-4 rounded-2xl shadow-lg border z-50 max-w-md ${
+              showToast.message.includes('✅') 
+                ? 'bg-green-500/90 border-green-400/30' 
+                : showToast.message.includes('⚠️') 
+                ? 'bg-yellow-500/90 border-yellow-400/30'
+                : showToast.message.includes('❌')
+                ? 'bg-red-500/90 border-red-400/30'
+                : 'bg-blue-500/90 border-blue-400/30'
+            }`}
+          >
+            <div className="flex items-start space-x-3">
+              <div className={`w-2 h-2 rounded-full animate-pulse mt-2 ${
+                showToast.message.includes('✅') 
+                  ? 'bg-green-300' 
+                  : showToast.message.includes('⚠️') 
+                  ? 'bg-yellow-300'
+                  : showToast.message.includes('❌')
+                  ? 'bg-red-300'
+                  : 'bg-blue-300'
+              }`} />
+              <div className="flex-1 min-w-0">
+                <span className="font-medium text-sm leading-relaxed break-words">
+                  {showToast.message}
+                </span>
+              </div>
             </div>
           </motion.div>
         )}
@@ -1849,27 +2107,118 @@ export default function MusicRecognitionApp() {
               {/* Ambient Glow Effect */}
               <div className="absolute inset-0 bg-gradient-to-r from-pink-500/20 via-purple-500/20 to-blue-500/20 animate-pulse opacity-60" />
               
-              {/* Progress Bar - Top of player */}
-              <div className="relative">
-                <div className="h-2 bg-white/10 cursor-pointer group relative overflow-hidden">
+              {/* Enhanced Progress Bar - Top of player */}
+              <div className="relative group">
+                <div 
+                  className="h-3 bg-gradient-to-r from-gray-800/50 via-gray-700/50 to-gray-800/50 cursor-pointer relative overflow-hidden rounded-full backdrop-blur-sm border border-white/5"
+                  onClick={(e) => {
+                    if (audioRef.current && duration > 0) {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const clickX = e.clientX - rect.left;
+                      const newTime = (clickX / rect.width) * duration;
+                      audioRef.current.currentTime = newTime;
+                      setCurrentTime(newTime);
+                    }
+                  }}
+                >
+                  {/* Background pulse effect */}
                   <motion.div 
-                    className="h-full bg-gradient-to-r from-pink-400 via-purple-500 to-blue-500 relative"
+                    className="absolute inset-0 bg-gradient-to-r from-pink-500/10 via-purple-500/10 to-blue-500/10 rounded-full"
+                    animate={isPlaying ? {
+                      opacity: [0.3, 0.6, 0.3],
+                      scale: [1, 1.02, 1]
+                    } : {}}
+                    transition={{
+                      duration: 3,
+                      repeat: Infinity,
+                      ease: "easeInOut"
+                    }}
+                  />
+                  
+                  {/* Progress fill with enhanced gradient */}
+                  <motion.div 
+                    className="h-full bg-gradient-to-r from-pink-400 via-purple-500 to-blue-500 relative rounded-full overflow-hidden"
                     style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
                     initial={{ width: 0 }}
+                    transition={{ type: "spring", damping: 30, stiffness: 300 }}
                   >
-                    {/* Shimmer effect */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
+                    {/* Enhanced shimmer effect */}
+                    <motion.div 
+                      className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent"
+                      animate={{
+                        x: ["-100%", "100%"]
+                      }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "linear"
+                      }}
+                    />
+                    
+                    {/* Glow effect */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-pink-400/50 via-purple-500/50 to-blue-500/50 blur-sm rounded-full" />
                   </motion.div>
                   
-                  {/* Progress handle */}
+                  {/* Interactive progress handle */}
                   <motion.div 
-                    className="absolute top-1/2 transform -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-300"
+                    className="absolute top-1/2 transform -translate-y-1/2 -translate-x-1/2 w-5 h-5 bg-white rounded-full shadow-2xl opacity-0 group-hover:opacity-100 transition-all duration-300 z-10"
                     style={{ left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
-                    whileHover={{ scale: 1.2 }}
+                    whileHover={{ scale: 1.3 }}
+                    whileTap={{ scale: 0.9 }}
                   >
-                    <div className="absolute inset-0 bg-gradient-to-r from-pink-400 to-purple-500 rounded-full animate-pulse" />
+                    {/* Handle glow */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-pink-400 to-purple-500 rounded-full blur-sm opacity-80" />
+                    <div className="absolute inset-0 bg-white rounded-full border-2 border-purple-300" />
+                    
+                    {/* Ripple effect on hover */}
+                    <motion.div
+                      className="absolute inset-0 border-2 border-white/50 rounded-full"
+                      animate={{
+                        scale: [1, 2, 1],
+                        opacity: [0.5, 0, 0.5]
+                      }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "easeOut"
+                      }}
+                    />
+                  </motion.div>
+                  
+                  {/* Time preview tooltip on hover */}
+                  <motion.div
+                    className="absolute -top-10 left-0 transform -translate-x-1/2 bg-black/80 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-20"
+                    style={{ left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+                  >
+                    {formatTime(currentTime)}
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-2 border-r-2 border-t-4 border-transparent border-t-black/80" />
                   </motion.div>
                 </div>
+                
+                {/* Waveform visualization behind progress */}
+                {isPlaying && (
+                  <motion.div 
+                    className="absolute inset-0 flex items-center justify-center space-x-1 opacity-20 pointer-events-none"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 0.2 }}
+                  >
+                    {[...Array(40)].map((_, i) => (
+                      <motion.div
+                        key={i}
+                        className="w-0.5 bg-gradient-to-t from-pink-400 to-purple-500 rounded-full"
+                        animate={{
+                          height: [2, Math.random() * 8 + 4, 2],
+                        }}
+                        transition={{
+                          duration: 0.8 + Math.random() * 0.4,
+                          repeat: Infinity,
+                          delay: i * 0.02,
+                          ease: "easeInOut"
+                        }}
+                      />
+                    ))}
+                  </motion.div>
+                )}
               </div>
 
               {/* Player Content */}
@@ -2063,51 +2412,237 @@ export default function MusicRecognitionApp() {
                   </div>
                 </div>
 
-                {/* Compact Rating System - Hidden when minimized */}
+                {/* Revolutionary Rating System - Hidden when minimized */}
                 {!isPlayerMinimized && (
                   <motion.div 
-                    className="mt-4 border-t border-white/10 pt-3"
-                    initial={{ opacity: 0, y: 10 }}
+                    className="mt-6 border-t border-white/10 pt-4"
+                    initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ delay: 0.2 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ delay: 0.4 }}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <Star className="h-4 w-4 text-yellow-400" />
-                        <span className="text-sm text-gray-300">Rate:</span>
-                        <div className="flex space-x-1">
-                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => (
-                            <motion.button
-                              key={rating}
-                              whileHover={{ scale: 1.2 }}
-                              whileTap={{ scale: 0.9 }}
-                              onClick={() => rateTrack(currentTrack!.id, rating)}
-                              className={`w-6 h-6 rounded-lg text-xs font-bold transition-all duration-200 ${
-                                currentTrack?.rating === rating
-                                  ? 'bg-yellow-500 text-black shadow-lg'
-                                  : currentTrack?.rating && rating <= currentTrack.rating
-                                  ? 'bg-yellow-600/80 text-white'
-                                  : 'bg-white/10 hover:bg-white/20 text-gray-400 hover:text-white'
-                              }`}
-                            >
-                              {rating}
-                            </motion.button>
-                          ))}
-                        </div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-medium text-gray-300 flex items-center">
+                      <Star className="h-4 w-4 mr-2 text-yellow-400" />
+                      Rate this masterpiece
+                    </span>
+                    {currentTrack?.rating && (
+                      <motion.span 
+                        className="text-sm font-semibold px-3 py-1 rounded-full bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/30 text-yellow-300"
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ type: "spring", damping: 15 }}
+                      >
+                        Rated {currentTrack.rating}/10
+                      </motion.span>
+                    )}
+                  </div>
+                  
+                  {/* Apple-Level Rating Interface */}
+                  <div className="relative">
+                    <div className="h-14 bg-gradient-to-r from-gray-800/50 to-gray-700/50 rounded-2xl backdrop-blur-sm border border-white/10 relative overflow-visible">
+                      {/* Animated Gradient Background */}
+                      <motion.div 
+                        className="absolute inset-0 bg-gradient-to-r from-pink-500/10 via-purple-500/10 to-blue-500/10"
+                        animate={{
+                          background: [
+                            "linear-gradient(90deg, rgba(236,72,153,0.1) 0%, rgba(139,92,246,0.1) 50%, rgba(59,130,246,0.1) 100%)",
+                            "linear-gradient(90deg, rgba(59,130,246,0.1) 0%, rgba(236,72,153,0.1) 50%, rgba(139,92,246,0.1) 100%)",
+                            "linear-gradient(90deg, rgba(139,92,246,0.1) 0%, rgba(59,130,246,0.1) 50%, rgba(236,72,153,0.1) 100%)"
+                          ]
+                        }}
+                        transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                      />
+                      
+                      {/* Rating Numbers */}
+                      <div className="absolute inset-0 flex items-center py-1" style={{
+                        paddingLeft: '5%',
+                        paddingRight: '5%',
+                        justifyContent: 'space-between'
+                      }}>
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => (
+                          <motion.button
+                            key={rating}
+                            whileHover={{ 
+                              scale: 1.3, 
+                              y: -8,
+                              rotate: [0, -5, 5, 0]
+                            }}
+                            whileTap={{ 
+                              scale: 1.1,
+                              y: -4
+                            }}
+                            onClick={() => {
+                              console.log('Before rating - currentTrack:', currentTrack);
+                              rateTrack(currentTrack!.id, rating);
+                              console.log(`🎵 Rated ${rating}/10 with satisfying feedback!`);
+                              // Force a small delay then check the rating
+                              setTimeout(() => {
+                                console.log('After rating - currentTrack rating:', currentTrack?.rating);
+                              }, 100);
+                            }}
+                            className={`relative group w-8 h-8 rounded-xl font-bold text-sm transition-all duration-300 transform flex items-center justify-center overflow-visible ${
+                              currentTrack?.rating === rating
+                                ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-black shadow-xl shadow-yellow-500/60 scale-125 rotate-3'
+                                : currentTrack?.rating && rating <= currentTrack.rating
+                                ? 'bg-gradient-to-r from-yellow-500/90 to-orange-600/90 text-white shadow-lg shadow-yellow-500/30 scale-105'
+                                : 'bg-white/15 hover:bg-gradient-to-r hover:from-pink-500/20 hover:to-purple-500/20 text-gray-300 hover:text-white border border-white/20 hover:border-pink-400/50 hover:shadow-lg hover:shadow-pink-500/25'
+                            } ${
+                              ratingFeedback?.rating === rating && ratingFeedback?.show
+                                ? 'ring-4 ring-green-400/60 shadow-2xl shadow-green-500/50'
+                                : ''
+                            }`}
+                          >
+                            {/* Number */}
+                            <span className="relative z-20 font-bold text-sm leading-none">{rating}</span>
+                           
+                           {/* Hover Glow Effect */}
+                           <motion.div
+                             className="absolute inset-0 rounded-xl bg-gradient-to-r from-pink-400/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                             whileHover={{
+                               boxShadow: [
+                                 "0 0 0 rgba(236,72,153,0)",
+                                 "0 0 20px rgba(236,72,153,0.5)",
+                                 "0 0 0 rgba(236,72,153,0)"
+                               ]
+                             }}
+                             transition={{ duration: 1, repeat: Infinity }}
+                           />
+                           
+                           {/* Selection Ripple */}
+                           {currentTrack?.rating === rating && (
+                             <motion.div
+                               className="absolute inset-0 rounded-xl border-2 border-yellow-300"
+                               animate={{
+                                 scale: [1, 1.4, 1],
+                                 opacity: [0.8, 0, 0.8]
+                               }}
+                               transition={{
+                                 duration: 2,
+                                 repeat: Infinity,
+                                 ease: "easeInOut"
+                               }}
+                             />
+                           )}
+
+                           {/* Green Glow Feedback Effect */}
+                           {ratingFeedback?.rating === rating && ratingFeedback?.show && (
+                             <motion.div
+                               className="absolute inset-0 rounded-xl"
+                               initial={{ scale: 1, opacity: 0 }}
+                               animate={{ 
+                                 scale: [1, 1.3, 1.1, 1],
+                                 opacity: [0, 1, 0.8, 0],
+                                 boxShadow: [
+                                   "0 0 0 rgba(34, 197, 94, 0)",
+                                   "0 0 30px rgba(34, 197, 94, 0.8)",
+                                   "0 0 40px rgba(34, 197, 94, 0.6)",
+                                   "0 0 0 rgba(34, 197, 94, 0)"
+                                 ]
+                               }}
+                               transition={{ 
+                                 duration: 1,
+                                 ease: [0.23, 1, 0.32, 1]
+                               }}
+                               style={{
+                                 background: "radial-gradient(circle, rgba(34, 197, 94, 0.4) 0%, rgba(34, 197, 94, 0.1) 50%, transparent 100%)"
+                               }}
+                             />
+                           )}
+                           
+                           {/* Particle Effect on Hover */}
+                           <AnimatePresence>
+                             <motion.div
+                               className="absolute inset-0 pointer-events-none"
+                               whileHover={{
+                                 background: [
+                                   "radial-gradient(circle, rgba(255,255,255,0) 0%, rgba(255,255,255,0) 100%)",
+                                   "radial-gradient(circle, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0) 70%)",
+                                   "radial-gradient(circle, rgba(255,255,255,0) 0%, rgba(255,255,255,0) 100%)"
+                                 ]
+                               }}
+                               transition={{ duration: 0.6 }}
+                             />
+                           </AnimatePresence>
+                         </motion.button>
+                        ))}
                       </div>
                       
-                      {currentTrack?.rating && (
-                        <motion.span 
-                          className="text-sm px-2 py-1 rounded-lg bg-yellow-500/20 text-yellow-300"
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
+                      {/* Progress Track Background - Always Visible */}
+                      <div className="absolute bottom-0 h-3 bg-white/10 rounded-full overflow-hidden" style={{
+                        left: '20px',
+                        right: '20px'
+                      }}>
+                        {/* Progress Fill Based on Rating - Enhanced */}
+                        <motion.div
+                          className="h-full bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 rounded-full shadow-lg shadow-yellow-500/50 relative"
+                          initial={{ width: 0 }}
+                          animate={{ 
+                            width: currentTrack?.rating ? `${5 + ((currentTrack.rating - 1) / 9) * 90}%` : '0%'
+                          }}
+                          transition={{ 
+                            type: "spring", 
+                            damping: 25, 
+                            stiffness: 200,
+                            delay: 0.2
+                          }}
+                          onAnimationComplete={() => {
+                            console.log('Progress bar animation complete. Current rating:', currentTrack?.rating);
+                          }}
                         >
-                          {currentTrack.rating}/10
-                        </motion.span>
-                      )}
+                          {/* Enhanced shimmer effect */}
+                          {currentTrack?.rating && (
+                            <motion.div 
+                              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent rounded-full"
+                              animate={{
+                                x: ["-100%", "100%"]
+                              }}
+                              transition={{
+                                duration: 2,
+                                repeat: Infinity,
+                                ease: "linear"
+                              }}
+                            />
+                          )}
+                          
+                          {/* Glow effect */}
+                          {currentTrack?.rating && (
+                            <div className="absolute inset-0 bg-gradient-to-r from-yellow-400/60 via-orange-500/60 to-red-500/60 blur-sm rounded-full" />
+                          )}
+                        </motion.div>
+                      </div>
                     </div>
-
+                    
+                    {/* Contextual Rating Labels */}
+                    <div className="flex justify-between mt-2 px-2">
+                      <div className="flex space-x-6 text-xs">
+                        <motion.span 
+                          className="text-red-400"
+                          whileHover={{ scale: 1.1 }}
+                        >
+                          1-3: Skip ⏭️
+                        </motion.span>
+                        <motion.span 
+                          className="text-yellow-400"
+                          whileHover={{ scale: 1.1 }}
+                        >
+                          4-6: It's OK 😐
+                        </motion.span>
+                        <motion.span 
+                          className="text-green-400"
+                          whileHover={{ scale: 1.1 }}
+                        >
+                          7-8: Love it! ❤️
+                        </motion.span>
+                        <motion.span 
+                          className="text-purple-400"
+                          whileHover={{ scale: 1.1 }}
+                        >
+                          9-10: Masterpiece 🎵
+                        </motion.span>
+                      </div>
+                    </div>
+                  </div>
                   </motion.div>
                 )}
               </div>
