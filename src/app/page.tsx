@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Upload, Play, Pause, SkipForward, SkipBack, Shuffle, Star, Brain, Music, Volume2, Minimize2, Maximize2 } from "lucide-react";
+import { Upload, Play, Pause, SkipForward, SkipBack, Shuffle, Star, Brain, Music, Volume2, Minimize2, Maximize2, Settings } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface MusicTrack {
@@ -21,7 +21,7 @@ interface AIInsights {
 }
 
 export default function MusicRecognitionApp() {
-  const [currentView, setCurrentView] = useState<'landing' | 'upload' | 'library' | 'pricing'>('landing');
+  const [currentView, setCurrentView] = useState<'landing' | 'upload' | 'library' | 'pricing' | 'settings'>('landing');
   const [isAnnualBilling, setIsAnnualBilling] = useState(false);
   const [musicLibrary, setMusicLibrary] = useState<MusicTrack[]>([]);
   const [currentTrack, setCurrentTrack] = useState<MusicTrack | null>(null);
@@ -48,12 +48,23 @@ export default function MusicRecognitionApp() {
   const [ratingFeedback, setRatingFeedback] = useState<{ rating: number; show: boolean } | null>(null);
   const [showToast, setShowToast] = useState<{ message: string; show: boolean } | null>(null);
   const [playHistory, setPlayHistory] = useState<string[]>([]); // Track order of played songs
+  const [smoothCurrentTime, setSmoothCurrentTime] = useState(0); // Smooth interpolated time
+
+  // Debug Box Positions
+  const [topDebugBoxY, setTopDebugBoxY] = useState(0); // Top box starts at its default position (top: 16px)
+  const [bottomDebugBoxY, setBottomDebugBoxY] = useState(0); // Bottom box starts at its default position (bottom: 16px)
+
+  // AI Training Settings
+  const [aiTrainingMode, setAiTrainingMode] = useState<'rating' | 'audio' | 'listening' | 'genre' | 'tempo' | 'hybrid'>('rating');
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const progressAnimationRef = useRef<number | null>(null);
+  const lastUpdateTimeRef = useRef<number>(0);
+  const lastAudioTimeRef = useRef<number>(0);
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
 
   // Local Storage Functions for Persistent Ratings
@@ -97,6 +108,25 @@ export default function MusicRecognitionApp() {
       rating: storedRatings[track.name]?.rating || track.rating,
       analyzed: storedRatings[track.name]?.analyzed || track.analyzed
     }));
+  };
+
+  // AI Training Mode Persistence
+  const saveTrainingModeToStorage = (mode: string) => {
+    try {
+      localStorage.setItem('musicAppTrainingMode', mode);
+    } catch (error) {
+      console.error('Failed to save training mode to localStorage:', error);
+    }
+  };
+
+  const loadTrainingModeFromStorage = (): string => {
+    try {
+      const saved = localStorage.getItem('musicAppTrainingMode');
+      return saved || 'rating';
+    } catch (error) {
+      console.error('Failed to load training mode from localStorage:', error);
+      return 'rating';
+    }
   };
 
   // Setup Web Audio API for real-time audio analysis
@@ -212,21 +242,26 @@ export default function MusicRecognitionApp() {
 
     if (isPlaying) {
       animate();
+      startSmoothProgress(); // Start ultra-smooth progress updates
+    } else {
+      stopSmoothProgress(); // Stop smooth progress updates
     }
 
     return () => {
       if (animationFrame) {
         cancelAnimationFrame(animationFrame);
       }
+      stopSmoothProgress();
     };
   }, [isPlaying]);
 
-  // Cleanup audio context on unmount
+  // Cleanup audio context and animations on unmount
   useEffect(() => {
     return () => {
       if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
         audioContextRef.current.close();
       }
+      stopSmoothProgress(); // Cleanup progress animation
     };
   }, []);
 
@@ -265,6 +300,17 @@ export default function MusicRecognitionApp() {
       readyForRecommendations: ratedSongs >= 20
     });
   }, [musicLibrary]);
+
+  // Load training mode on app start
+  useEffect(() => {
+    const savedMode = loadTrainingModeFromStorage();
+    setAiTrainingMode(savedMode as any);
+  }, []);
+
+  // Save training mode when changed
+  useEffect(() => {
+    saveTrainingModeToStorage(aiTrainingMode);
+  }, [aiTrainingMode]);
 
   // Handle file uploads
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -340,25 +386,134 @@ export default function MusicRecognitionApp() {
     }
   };
 
+  // Smooth progress bar animation system
+  const startSmoothProgressUpdate = () => {
+    if (progressAnimationRef.current) return; // Already running
+    
+    const updateProgress = () => {
+      if (audioRef.current && isPlaying) {
+        const now = Date.now();
+        const deltaTime = (now - lastUpdateTimeRef.current) / 1000; // Convert to seconds
+        
+        // Get actual audio time
+        const audioTime = audioRef.current.currentTime;
+        
+        // If there's a significant difference (seeking, buffering, etc.), snap to audio time
+        if (Math.abs(audioTime - smoothCurrentTime) > 0.5) {
+          setSmoothCurrentTime(audioTime);
+        } else {
+          // Otherwise, smoothly interpolate forward
+          setSmoothCurrentTime(prev => {
+            const interpolated = prev + deltaTime;
+            // Don't go beyond the actual audio time by too much
+            return Math.min(interpolated, audioTime + 0.1);
+          });
+        }
+        
+        lastUpdateTimeRef.current = now;
+        progressAnimationRef.current = requestAnimationFrame(updateProgress);
+      } else {
+        progressAnimationRef.current = null;
+      }
+    };
+    
+    lastUpdateTimeRef.current = Date.now();
+    progressAnimationRef.current = requestAnimationFrame(updateProgress);
+  };
+
+  const stopSmoothProgressUpdate = () => {
+    if (progressAnimationRef.current) {
+      cancelAnimationFrame(progressAnimationRef.current);
+      progressAnimationRef.current = null;
+    }
+  };
+
+  // Ultra-smooth progress animation system
+  const startSmoothProgress = () => {
+    if (progressAnimationRef.current || !isPlaying) return;
+    
+    const animate = () => {
+      if (!audioRef.current || !isPlaying) {
+        progressAnimationRef.current = null;
+        return;
+      }
+      
+      const now = performance.now();
+      const deltaTime = (now - lastUpdateTimeRef.current) / 1000; // Convert to seconds
+      const audioTime = audioRef.current.currentTime;
+      
+      // Check if audio time jumped significantly (seeking, buffering, etc.)
+      if (Math.abs(audioTime - lastAudioTimeRef.current) > 0.3) {
+        // Big jump detected - sync immediately
+        setSmoothCurrentTime(audioTime);
+        lastAudioTimeRef.current = audioTime;
+      } else {
+        // Smooth interpolation
+        setSmoothCurrentTime(prev => {
+          const predicted = prev + deltaTime;
+          const diff = audioTime - predicted;
+          
+          // Gentle correction towards actual audio time
+          // If we're close, just increment smoothly
+          if (Math.abs(diff) < 0.1) {
+            return Math.min(predicted, duration || Infinity);
+          } else {
+            // Gradually correct larger differences
+            return prev + deltaTime + (diff * 0.1);
+          }
+        });
+      }
+      
+      lastUpdateTimeRef.current = now;
+      progressAnimationRef.current = requestAnimationFrame(animate);
+    };
+    
+    lastUpdateTimeRef.current = performance.now();
+    progressAnimationRef.current = requestAnimationFrame(animate);
+  };
+
+  const stopSmoothProgress = () => {
+    if (progressAnimationRef.current) {
+      cancelAnimationFrame(progressAnimationRef.current);
+      progressAnimationRef.current = null;
+    }
+  };
+
   const handleTimeUpdate = () => {
     if (audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime);
+      const audioTime = audioRef.current.currentTime;
+      setCurrentTime(audioTime);
+      lastAudioTimeRef.current = audioTime;
+      
+      // Sync smooth time periodically to prevent drift
+      if (Math.abs(audioTime - smoothCurrentTime) > 0.5) {
+        setSmoothCurrentTime(audioTime);
+      }
     }
   };
 
   const handleLoadedMetadata = () => {
     if (audioRef.current) {
       setDuration(audioRef.current.duration);
+      setCurrentTime(0);
+      setSmoothCurrentTime(0);
+      lastAudioTimeRef.current = 0;
     }
   };
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (audioRef.current) {
+    if (audioRef.current && duration > 0) {
       const rect = e.currentTarget.getBoundingClientRect();
       const clickX = e.clientX - rect.left;
-      const newTime = (clickX / rect.width) * duration;
+      const newTime = Math.max(0, Math.min((clickX / rect.width) * duration, duration));
+      
+      // Update audio time
       audioRef.current.currentTime = newTime;
       setCurrentTime(newTime);
+      
+      // Immediately sync smooth time for responsive seeking
+      setSmoothCurrentTime(newTime);
+      lastAudioTimeRef.current = newTime;
     }
   };
 
@@ -495,7 +650,8 @@ export default function MusicRecognitionApp() {
           unratedTracks: unratedTracks.map(track => ({
             id: track.id,
             name: track.name
-          }))
+          })),
+          trainingMode: aiTrainingMode
         })
       });
       
@@ -552,21 +708,40 @@ export default function MusicRecognitionApp() {
   // Revolutionary Landing Page Component - Apple-Beating Design
   const renderLandingPage = () => (
     <div className="min-h-screen flex items-start justify-center relative overflow-hidden pt-16 pb-8">
-      {/* Floating Pricing Button */}
-      <motion.button
-        initial={{ opacity: 0, scale: 0.8, y: -20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ delay: 2, type: "spring", damping: 20 }}
-        whileHover={{ scale: 1.05, y: -2 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={() => setCurrentView('pricing')}
-        className="fixed top-6 right-6 z-50 bg-gradient-to-r from-orange-500/90 to-red-500/90 backdrop-blur-xl text-white px-4 py-2 rounded-full shadow-lg hover:shadow-orange-500/25 transition-all duration-300 border border-white/10"
-      >
-        <div className="flex items-center space-x-2">
-          <Star className="h-4 w-4" />
-          <span className="font-semibold">Upgrade</span>
-        </div>
-      </motion.button>
+      {/* Floating Navigation Buttons */}
+      <div className="fixed top-6 right-6 z-50 flex flex-col space-y-3">
+        {/* Settings Button */}
+        <motion.button
+          initial={{ opacity: 0, scale: 0.8, y: -20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ delay: 1.8, type: "spring", damping: 20 }}
+          whileHover={{ scale: 1.05, y: -2 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setCurrentView('settings')}
+          className="bg-gradient-to-r from-gray-600/90 to-gray-700/90 backdrop-blur-xl text-white px-4 py-2 rounded-full shadow-lg hover:shadow-gray-500/25 transition-all duration-300 border border-white/10"
+        >
+          <div className="flex items-center space-x-2">
+            <Settings className="h-4 w-4" />
+            <span className="font-semibold">Settings</span>
+          </div>
+        </motion.button>
+        
+        {/* Pricing Button */}
+        <motion.button
+          initial={{ opacity: 0, scale: 0.8, y: -20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ delay: 2, type: "spring", damping: 20 }}
+          whileHover={{ scale: 1.05, y: -2 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setCurrentView('pricing')}
+          className="bg-gradient-to-r from-orange-500/90 to-red-500/90 backdrop-blur-xl text-white px-4 py-2 rounded-full shadow-lg hover:shadow-orange-500/25 transition-all duration-300 border border-white/10"
+        >
+          <div className="flex items-center space-x-2">
+            <Star className="h-4 w-4" />
+            <span className="font-semibold">Upgrade</span>
+          </div>
+        </motion.button>
+      </div>
 
       {/* Ultra-Premium Layered Background System */}
       <div className="absolute inset-0">
@@ -1242,12 +1417,27 @@ export default function MusicRecognitionApp() {
     <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white pb-32">
       {/* Debug Info - Remove after testing */}
       {process.env.NODE_ENV === 'development' && (
-        <div className="fixed top-4 right-4 bg-black/80 text-white p-2 rounded text-xs z-50">
+        <motion.div
+          drag="y"
+          dragConstraints={{ top: 0, bottom: 400 }} // Can only slide down from its starting position
+          dragElastic={0.1}
+          dragMomentum={false}
+          onDrag={(event, info) => {
+            setTopDebugBoxY(info.point.y - 16); // Adjust for the initial top: 16px offset
+          }}
+          whileDrag={{ scale: 1.05, boxShadow: "0 10px 30px rgba(0,0,0,0.3)" }}
+          className="fixed right-4 bg-black/80 text-white p-2 rounded text-xs z-50 cursor-grab active:cursor-grabbing select-none"
+          style={{ top: 16 + topDebugBoxY }}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="font-semibold text-blue-400">Debug Info</span>
+            <span className="text-gray-400">⋮⋮</span>
+          </div>
           Current Track: {currentTrack ? currentTrack.name : 'None'}<br/>
           Playing: {isPlaying ? 'Yes' : 'No'}<br/>
           Library Count: {musicLibrary.length}<br/>
           View: {currentView}
-        </div>
+        </motion.div>
       )}
 
       {/* Conditional Rendering Based on Current View */}
@@ -1268,17 +1458,29 @@ export default function MusicRecognitionApp() {
                 <span>Back</span>
               </motion.button>
               
-              {musicLibrary.length > 0 && (
+              <div className="flex items-center space-x-3">
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => setCurrentView('library')}
-                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30 rounded-full text-blue-300 hover:text-blue-200 transition-all duration-300"
+                  onClick={() => setCurrentView('settings')}
+                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-gray-600/20 to-gray-700/20 border border-gray-600/30 rounded-full text-gray-300 hover:text-gray-200 transition-all duration-300"
                 >
-                  <Music className="h-4 w-4" />
-                  <span>View Library ({musicLibrary.length})</span>
+                  <Settings className="h-4 w-4" />
+                  <span>Settings</span>
                 </motion.button>
-              )}
+                
+                {musicLibrary.length > 0 && (
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setCurrentView('library')}
+                    className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30 rounded-full text-blue-300 hover:text-blue-200 transition-all duration-300"
+                  >
+                    <Music className="h-4 w-4" />
+                    <span>View Library ({musicLibrary.length})</span>
+                  </motion.button>
+                )}
+              </div>
             </div>
             
             <motion.h1 
@@ -1343,15 +1545,27 @@ export default function MusicRecognitionApp() {
                 <span>Back</span>
               </motion.button>
               
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setCurrentView('upload')}
-                className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-pink-500/30 rounded-full text-pink-300 hover:text-pink-200 transition-all duration-300"
-              >
-                <Upload className="h-4 w-4" />
-                <span>Add More Songs</span>
-              </motion.button>
+              <div className="flex items-center space-x-3">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setCurrentView('settings')}
+                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-gray-600/20 to-gray-700/20 border border-gray-600/30 rounded-full text-gray-300 hover:text-gray-200 transition-all duration-300"
+                >
+                  <Settings className="h-4 w-4" />
+                  <span>Settings</span>
+                </motion.button>
+                
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setCurrentView('upload')}
+                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-pink-500/30 rounded-full text-pink-300 hover:text-pink-200 transition-all duration-300"
+                >
+                  <Upload className="h-4 w-4" />
+                  <span>Add More Songs</span>
+                </motion.button>
+              </div>
             </div>
             
             <motion.h1 
@@ -1583,15 +1797,13 @@ export default function MusicRecognitionApp() {
               {/* Progress Bar - Top of player */}
               <div className="relative">
                 <div 
-                  className="h-1 bg-white/10 cursor-pointer group relative overflow-hidden"
+                  className="h-2 bg-white/10 cursor-pointer group relative overflow-hidden"
                   onClick={handleProgressClick}
                 >
                   <motion.div 
                     className="h-full bg-gradient-to-r from-pink-400 via-purple-500 to-blue-500 relative"
-                    style={{ width: `${(currentTime / duration) * 100}%` }}
+                    style={{ width: `${duration > 0 ? (smoothCurrentTime / duration) * 100 : 0}%` }}
                     initial={{ width: 0 }}
-                    animate={{ width: `${(currentTime / duration) * 100}%` }}
-                    transition={{ duration: 0.1 }}
                   >
                     {/* Shimmer effect */}
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
@@ -1600,7 +1812,7 @@ export default function MusicRecognitionApp() {
                   {/* Progress handle */}
                   <motion.div 
                     className="absolute top-1/2 transform -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-300"
-                    style={{ left: `${(currentTime / duration) * 100}%` }}
+                    style={{ left: `${duration > 0 ? (smoothCurrentTime / duration) * 100 : 0}%` }}
                     whileHover={{ scale: 1.2 }}
                   >
                     <div className="absolute inset-0 bg-gradient-to-r from-pink-400 to-purple-500 rounded-full animate-pulse" />
@@ -2439,16 +2651,449 @@ export default function MusicRecognitionApp() {
         </motion.div>
       )}
 
+      {/* Settings View */}
+      {currentView === 'settings' && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          className="min-h-screen p-8"
+        >
+          {/* Header */}
+          <div className="mb-8">
+            <motion.button
+              whileHover={{ scale: 1.05, x: -5 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setCurrentView('landing')}
+              className="flex items-center space-x-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-full transition-all duration-300 mb-6"
+            >
+              <span className="text-xl">←</span>
+              <span>Back</span>
+            </motion.button>
+            
+            <motion.h1 
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-6xl font-bold text-center mb-4 bg-gradient-to-r from-purple-400 to-blue-300 bg-clip-text text-transparent"
+            >
+              ⚙️ Settings
+            </motion.h1>
+            <motion.p 
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="text-xl text-center text-gray-300 mb-8"
+            >
+              Customize your music discovery experience
+            </motion.p>
+          </div>
+
+          {/* Settings Content */}
+          <div className="max-w-4xl mx-auto space-y-8">
+            
+            {/* App Preferences */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-gradient-to-br from-gray-800/60 to-gray-900/60 backdrop-blur-lg rounded-xl p-6 border border-gray-700"
+            >
+              <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
+                <Settings className="h-6 w-6 mr-3 text-purple-400" />
+                App Preferences
+              </h2>
+              
+              <div className="space-y-6">
+                {/* Visual Mode Setting */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Visual Mode</h3>
+                    <p className="text-gray-400 text-sm">Choose your preferred interface style</p>
+                  </div>
+                  <select 
+                    value={visualMode}
+                    onChange={(e) => setVisualMode(e.target.value as 'minimal' | 'immersive' | 'focus')}
+                    className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="minimal">Minimal</option>
+                    <option value="immersive">Immersive</option>
+                    <option value="focus">Focus</option>
+                  </select>
+                </div>
+
+                {/* Auto-play Setting */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Auto-advance to Next Song</h3>
+                    <p className="text-gray-400 text-sm">Automatically play the next song when current song ends</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" defaultChecked className="sr-only peer" />
+                    <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                  </label>
+                </div>
+
+                {/* Shuffle Mode */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Default Shuffle Mode</h3>
+                    <p className="text-gray-400 text-sm">Start with shuffle mode enabled</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={isShuffleMode}
+                      onChange={(e) => setIsShuffleMode(e.target.checked)}
+                      className="sr-only peer" 
+                    />
+                    <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                  </label>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* AI & Recommendations */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="bg-gradient-to-br from-purple-800/60 to-blue-800/60 backdrop-blur-lg rounded-xl p-6 border border-purple-700"
+            >
+              <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
+                <Brain className="h-6 w-6 mr-3 text-blue-400" />
+                AI & Recommendations
+              </h2>
+              
+              <div className="space-y-6">
+                {/* AI Training Mode Selection */}
+                <div className="bg-gradient-to-r from-indigo-900/50 to-purple-900/50 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-white mb-4">AI Training Method</h3>
+                  <p className="text-gray-300 text-sm mb-4">Choose how the AI learns your music preferences</p>
+                  
+                  <div className="space-y-3">
+                    {/* Rating-Based Training */}
+                    <label className="flex items-start space-x-3 p-3 rounded-lg bg-gray-800/50 hover:bg-gray-800/70 transition-colors cursor-pointer">
+                      <input
+                        type="radio"
+                        name="aiTrainingMode"
+                        value="rating"
+                        checked={aiTrainingMode === 'rating'}
+                        onChange={(e) => setAiTrainingMode(e.target.value as any)}
+                        className="mt-1 text-blue-500 focus:ring-blue-500"
+                      />
+                      <div>
+                        <div className="text-white font-medium">⭐ Rating-Based Learning</div>
+                        <div className="text-gray-400 text-sm">AI learns from your 1-10 star ratings (Current method)</div>
+                      </div>
+                    </label>
+
+                    {/* Audio Analysis Training */}
+                    <label className="flex items-start space-x-3 p-3 rounded-lg bg-gray-800/50 hover:bg-gray-800/70 transition-colors cursor-pointer">
+                      <input
+                        type="radio"
+                        name="aiTrainingMode"
+                        value="audio"
+                        checked={aiTrainingMode === 'audio'}
+                        onChange={(e) => setAiTrainingMode(e.target.value as any)}
+                        className="mt-1 text-green-500 focus:ring-green-500"
+                      />
+                      <div>
+                        <div className="text-white font-medium">🎵 Audio Analysis Learning</div>
+                        <div className="text-gray-400 text-sm">AI analyzes sound patterns, frequencies, and audio characteristics</div>
+                      </div>
+                    </label>
+
+                    {/* Listening Behavior Training */}
+                    <label className="flex items-start space-x-3 p-3 rounded-lg bg-gray-800/50 hover:bg-gray-800/70 transition-colors cursor-pointer">
+                      <input
+                        type="radio"
+                        name="aiTrainingMode"
+                        value="listening"
+                        checked={aiTrainingMode === 'listening'}
+                        onChange={(e) => setAiTrainingMode(e.target.value as any)}
+                        className="mt-1 text-orange-500 focus:ring-orange-500"
+                      />
+                      <div>
+                        <div className="text-white font-medium">📊 Listening Behavior Learning</div>
+                        <div className="text-gray-400 text-sm">AI learns from play counts, skip rates, and listening duration</div>
+                      </div>
+                    </label>
+
+                    {/* Genre Preference Training */}
+                    <label className="flex items-start space-x-3 p-3 rounded-lg bg-gray-800/50 hover:bg-gray-800/70 transition-colors cursor-pointer">
+                      <input
+                        type="radio"
+                        name="aiTrainingMode"
+                        value="genre"
+                        checked={aiTrainingMode === 'genre'}
+                        onChange={(e) => setAiTrainingMode(e.target.value as any)}
+                        className="mt-1 text-pink-500 focus:ring-pink-500"
+                      />
+                      <div>
+                        <div className="text-white font-medium">🎭 Genre Pattern Learning</div>
+                        <div className="text-gray-400 text-sm">AI focuses on genre preferences and artist similarities</div>
+                      </div>
+                    </label>
+
+                    {/* Tempo/Energy Training */}
+                    <label className="flex items-start space-x-3 p-3 rounded-lg bg-gray-800/50 hover:bg-gray-800/70 transition-colors cursor-pointer">
+                      <input
+                        type="radio"
+                        name="aiTrainingMode"
+                        value="tempo"
+                        checked={aiTrainingMode === 'tempo'}
+                        onChange={(e) => setAiTrainingMode(e.target.value as any)}
+                        className="mt-1 text-cyan-500 focus:ring-cyan-500"
+                      />
+                      <div>
+                        <div className="text-white font-medium">⚡ Tempo & Energy Learning</div>
+                        <div className="text-gray-400 text-sm">AI learns from song tempo, energy levels, and mood patterns</div>
+                      </div>
+                    </label>
+
+                    {/* Hybrid Training */}
+                    <label className="flex items-start space-x-3 p-3 rounded-lg bg-gradient-to-r from-purple-800/30 to-blue-800/30 hover:from-purple-800/50 hover:to-blue-800/50 transition-colors cursor-pointer border border-purple-500/30">
+                      <input
+                        type="radio"
+                        name="aiTrainingMode"
+                        value="hybrid"
+                        checked={aiTrainingMode === 'hybrid'}
+                        onChange={(e) => setAiTrainingMode(e.target.value as any)}
+                        className="mt-1 text-purple-500 focus:ring-purple-500"
+                      />
+                      <div>
+                        <div className="text-white font-medium flex items-center">
+                          🚀 Hybrid AI Learning 
+                          <span className="ml-2 text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-2 py-1 rounded-full">RECOMMENDED</span>
+                        </div>
+                        <div className="text-gray-300 text-sm">Combines all methods for the most accurate recommendations</div>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Training Mode Status */}
+                  <div className="mt-4 p-3 bg-gray-900/50 rounded-lg">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-400">Active Training Mode:</span>
+                      <span className="text-blue-400 font-semibold capitalize">
+                        {aiTrainingMode === 'rating' && '⭐ Rating-Based'}
+                        {aiTrainingMode === 'audio' && '🎵 Audio Analysis'}
+                        {aiTrainingMode === 'listening' && '📊 Listening Behavior'}
+                        {aiTrainingMode === 'genre' && '🎭 Genre Patterns'}
+                        {aiTrainingMode === 'tempo' && '⚡ Tempo & Energy'}
+                        {aiTrainingMode === 'hybrid' && '🚀 Hybrid AI'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* AI Learning Status */}
+                <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-white mb-2">AI Learning Progress</h3>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-300">
+                      {aiTrainingMode === 'rating' && `Songs Rated: ${aiInsights.totalRatedSongs}/20`}
+                      {aiTrainingMode === 'audio' && `Audio Analysis: ${Math.min(musicLibrary.length, 50)}/50 songs`}
+                      {aiTrainingMode === 'listening' && `Listening Data: ${playHistory.length}/30 sessions`}
+                      {aiTrainingMode === 'genre' && `Genre Analysis: ${Math.min(musicLibrary.length, 25)}/25 songs`}
+                      {aiTrainingMode === 'tempo' && `Tempo Analysis: ${Math.min(musicLibrary.length, 40)}/40 songs`}
+                      {aiTrainingMode === 'hybrid' && `Combined Data: ${Math.min(aiInsights.totalRatedSongs + playHistory.length + musicLibrary.length, 100)}/100 points`}
+                    </span>
+                    <span className="text-blue-400 font-semibold">
+                      {aiTrainingMode === 'rating' && `${Math.round((aiInsights.totalRatedSongs / 20) * 100)}%`}
+                      {aiTrainingMode === 'audio' && `${Math.round((Math.min(musicLibrary.length, 50) / 50) * 100)}%`}
+                      {aiTrainingMode === 'listening' && `${Math.round((playHistory.length / 30) * 100)}%`}
+                      {aiTrainingMode === 'genre' && `${Math.round((Math.min(musicLibrary.length, 25) / 25) * 100)}%`}
+                      {aiTrainingMode === 'tempo' && `${Math.round((Math.min(musicLibrary.length, 40) / 40) * 100)}%`}
+                      {aiTrainingMode === 'hybrid' && `${Math.round((Math.min(aiInsights.totalRatedSongs + playHistory.length + musicLibrary.length, 100) / 100) * 100)}%`}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-2">
+                    <div 
+                      className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
+                      style={{ 
+                        width: `${
+                          aiTrainingMode === 'rating' ? Math.min((aiInsights.totalRatedSongs / 20) * 100, 100) :
+                          aiTrainingMode === 'audio' ? Math.min((musicLibrary.length / 50) * 100, 100) :
+                          aiTrainingMode === 'listening' ? Math.min((playHistory.length / 30) * 100, 100) :
+                          aiTrainingMode === 'genre' ? Math.min((musicLibrary.length / 25) * 100, 100) :
+                          aiTrainingMode === 'tempo' ? Math.min((musicLibrary.length / 40) * 100, 100) :
+                          aiTrainingMode === 'hybrid' ? Math.min(((aiInsights.totalRatedSongs + playHistory.length + musicLibrary.length) / 100) * 100, 100) : 0
+                        }%` 
+                      }}
+                    ></div>
+                  </div>
+                  <p className="text-gray-400 text-sm mt-2">
+                    {aiTrainingMode === 'rating' && (aiInsights.readyForRecommendations 
+                      ? 'AI is ready to provide personalized recommendations!' 
+                      : `Rate ${20 - aiInsights.totalRatedSongs} more songs to unlock AI recommendations.`)}
+                    {aiTrainingMode === 'audio' && (musicLibrary.length >= 50 
+                      ? 'Audio analysis complete! AI can generate sound-based recommendations.' 
+                      : `Upload ${50 - musicLibrary.length} more songs for complete audio analysis.`)}
+                    {aiTrainingMode === 'listening' && (playHistory.length >= 30 
+                      ? 'Listening patterns analyzed! AI understands your behavior.' 
+                      : `Play ${30 - playHistory.length} more songs to build listening pattern data.`)}
+                    {aiTrainingMode === 'genre' && (musicLibrary.length >= 25 
+                      ? 'Genre preferences mapped! AI knows your style.' 
+                      : `Add ${25 - musicLibrary.length} more songs for comprehensive genre analysis.`)}
+                    {aiTrainingMode === 'tempo' && (musicLibrary.length >= 40 
+                      ? 'Tempo & energy patterns learned! AI can match your mood.' 
+                      : `Upload ${40 - musicLibrary.length} more songs for tempo analysis.`)}
+                    {aiTrainingMode === 'hybrid' && ((aiInsights.totalRatedSongs + playHistory.length + musicLibrary.length) >= 100 
+                      ? 'Hybrid AI fully trained! Maximum recommendation accuracy achieved.' 
+                      : `Continue using the app to reach ${100 - (aiInsights.totalRatedSongs + playHistory.length + musicLibrary.length)} more data points.`)}
+                  </p>
+                </div>
+
+                {/* Clear AI Data */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Reset AI Learning</h3>
+                    <p className="text-gray-400 text-sm">Clear all song ratings and AI learning data</p>
+                  </div>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      if (confirm('Are you sure you want to clear all AI learning data? This cannot be undone.')) {
+                        localStorage.removeItem('musicAppRatings');
+                        setMusicLibrary(prev => prev.map(track => ({ ...track, rating: undefined, analyzed: undefined })));
+                        setRecommendations([]);
+                        setShowToast({ message: 'AI learning data cleared successfully!', show: true });
+                        setTimeout(() => setShowToast(null), 3000);
+                      }
+                    }}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all duration-300"
+                  >
+                    Clear Data
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Data & Storage */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="bg-gradient-to-br from-green-800/60 to-teal-800/60 backdrop-blur-lg rounded-xl p-6 border border-green-700"
+            >
+              <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
+                <Music className="h-6 w-6 mr-3 text-green-400" />
+                Data & Storage
+              </h2>
+              
+              <div className="space-y-6">
+                {/* Library Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-green-900/30 rounded-lg p-4 text-center">
+                    <div className="text-2xl font-bold text-green-400">{musicLibrary.length}</div>
+                    <div className="text-sm text-gray-300">Total Songs</div>
+                  </div>
+                  <div className="bg-teal-900/30 rounded-lg p-4 text-center">
+                    <div className="text-2xl font-bold text-teal-400">{aiInsights.totalRatedSongs}</div>
+                    <div className="text-sm text-gray-300">Rated Songs</div>
+                  </div>
+                  <div className="bg-blue-900/30 rounded-lg p-4 text-center">
+                    <div className="text-2xl font-bold text-blue-400">{recommendations.length}</div>
+                    <div className="text-sm text-gray-300">Recommendations</div>
+                  </div>
+                  <div className="bg-purple-900/30 rounded-lg p-4 text-center">
+                    <div className="text-2xl font-bold text-purple-400">{playHistory.length}</div>
+                    <div className="text-sm text-gray-300">Play History</div>
+                  </div>
+                </div>
+
+                {/* Clear Library */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Clear Music Library</h3>
+                    <p className="text-gray-400 text-sm">Remove all uploaded music files from the app</p>
+                  </div>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      if (confirm('Are you sure you want to clear your entire music library? This cannot be undone.')) {
+                        setMusicLibrary([]);
+                        setCurrentTrack(null);
+                        setIsPlaying(false);
+                        setRecommendations([]);
+                        setPlayHistory([]);
+                        setShowToast({ message: 'Music library cleared successfully!', show: true });
+                        setTimeout(() => setShowToast(null), 3000);
+                      }
+                    }}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all duration-300"
+                  >
+                    Clear Library
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* About */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="bg-gradient-to-br from-gray-800/60 to-gray-900/60 backdrop-blur-lg rounded-xl p-6 border border-gray-700"
+            >
+              <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
+                <Star className="h-6 w-6 mr-3 text-yellow-400" />
+                About Music AI Discovery
+              </h2>
+              
+              <div className="space-y-4 text-gray-300">
+                <p>
+                  Version 1.0.0 - A revolutionary AI-powered music discovery platform that learns your unique taste 
+                  and provides personalized recommendations.
+                </p>
+                <p>
+                  Built with Next.js, React, and OpenAI's advanced AI models to deliver the most sophisticated 
+                  music recommendation experience available.
+                </p>
+                <div className="flex items-center space-x-4 pt-4">
+                  <div className="text-sm">
+                    <span className="text-gray-400">Powered by:</span>
+                    <span className="text-blue-400 ml-2">OpenAI GPT-4</span>
+                  </div>
+                  <div className="text-sm">
+                    <span className="text-gray-400">Audio Analysis:</span>
+                    <span className="text-green-400 ml-2">Web Audio API</span>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </motion.div>
+      )}
+
       {/* Debug Audio Analysis Info - Remove in production */}
       {isPlaying && (
-        <div className="fixed bottom-4 right-4 bg-black/80 backdrop-blur-sm text-white p-3 rounded-lg text-xs z-50">
+        <motion.div
+          drag="y"
+          dragConstraints={{ top: -400, bottom: 0 }} // Can only slide up from its starting position
+          dragElastic={0.1}
+          dragMomentum={false}
+          onDrag={(event, info) => {
+            setBottomDebugBoxY(info.point.y); // Track the current Y position
+          }}
+          whileDrag={{ scale: 1.05, boxShadow: "0 10px 30px rgba(0,0,0,0.3)" }}
+          className="fixed right-4 bg-black/80 backdrop-blur-sm text-white p-3 rounded-lg text-xs z-50 cursor-grab active:cursor-grabbing select-none"
+          style={{ bottom: 16 - bottomDebugBoxY }}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-semibold text-green-400">Audio Analysis</span>
+            <span className="text-gray-400">⋮⋮</span>
+          </div>
           <div>Audio Context: {audioContextRef.current?.state || 'None'}</div>
           <div>Analyser: {analyserRef.current ? '✅' : '❌'}</div>
           <div>Source: {sourceRef.current ? '✅' : '❌'}</div>
           <div>Visualization Data Length: {soundVisualization.length}</div>
           <div>Max Level: {Math.max(...soundVisualization).toFixed(1)}%</div>
           <div>Avg Level: {(soundVisualization.reduce((a, b) => a + b, 0) / soundVisualization.length).toFixed(1)}%</div>
-        </div>
+        </motion.div>
       )}
 
       {/* Audio Element */}
