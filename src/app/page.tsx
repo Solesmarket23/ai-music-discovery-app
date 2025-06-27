@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Upload, Play, Pause, SkipForward, Shuffle, Star, Brain, Music, Volume2 } from "lucide-react";
+import { Upload, Play, Pause, SkipForward, Shuffle, Star, Brain, Music, Volume2, Minimize2, Maximize2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface MusicTrack {
@@ -43,6 +43,9 @@ export default function MusicRecognitionApp() {
   const [visualMode, setVisualMode] = useState<'minimal' | 'immersive' | 'focus'>('immersive');
   const [hoverCard, setHoverCard] = useState<string | null>(null);
   const [soundVisualization, setSoundVisualization] = useState<number[]>(Array(20).fill(0));
+  const [isPlayerMinimized, setIsPlayerMinimized] = useState(false);
+  const [ratingFeedback, setRatingFeedback] = useState<{ rating: number; show: boolean } | null>(null);
+  const [showToast, setShowToast] = useState<{ message: string; show: boolean } | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -216,6 +219,30 @@ export default function MusicRecognitionApp() {
       readyForRecommendations: ratedSongs >= 20
     }));
 
+    // Show immediate visual feedback
+    setRatingFeedback({ rating, show: true });
+    
+    // Show toast notification
+    const ratingMessages = {
+      1: "Skip this! 🚫", 2: "Not great 😑", 3: "Meh... ⚠️",
+      4: "It's okay 😐", 5: "Pretty good 👍", 6: "Nice! 😊",
+      7: "Love it! ❤️", 8: "Amazing! 🔥", 9: "Incredible! ⭐", 10: "Masterpiece! 🎵✨"
+    };
+    setShowToast({ 
+      message: `Rated ${rating}/10 - ${ratingMessages[rating as keyof typeof ratingMessages]}`, 
+      show: true 
+    });
+
+    // Clear feedback after animation
+    setTimeout(() => {
+      setRatingFeedback(null);
+    }, 1000);
+
+    // Clear toast after delay
+    setTimeout(() => {
+      setShowToast(null);
+    }, 3000);
+
     // Immediate AI learning feedback
     console.log(`🎵 Song rated ${rating}/10 - AI learning from your taste! 💾 Saved to storage`);
 
@@ -315,7 +342,7 @@ export default function MusicRecognitionApp() {
 
   // Revolutionary Landing Page Component - Apple-Beating Design
   const renderLandingPage = () => (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden py-8">
+    <div className="min-h-screen flex items-start justify-center relative overflow-hidden pt-16 pb-8">
       {/* Ultra-Premium Layered Background System */}
       <div className="absolute inset-0">
         {/* Neural Network Particle System */}
@@ -1197,6 +1224,35 @@ export default function MusicRecognitionApp() {
         </div>
       )}
 
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {showToast?.show && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -30, scale: 0.9 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="fixed top-8 left-1/2 transform -translate-x-1/2 z-[60]"
+          >
+            <div className="bg-gradient-to-r from-green-500/90 to-emerald-500/90 backdrop-blur-xl rounded-2xl px-6 py-3 border border-green-400/30 shadow-2xl shadow-green-500/25">
+              <div className="flex items-center space-x-3">
+                <motion.div
+                  animate={{ 
+                    scale: [1, 1.2, 1],
+                    rotate: [0, 180, 360]
+                  }}
+                  transition={{ duration: 0.6 }}
+                  className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center"
+                >
+                  <span className="text-sm">✓</span>
+                </motion.div>
+                <span className="text-white font-medium text-sm">{showToast.message}</span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Revolutionary Music Player - Fixed at bottom */}
       <AnimatePresence>
         {currentTrack && (
@@ -1241,17 +1297,17 @@ export default function MusicRecognitionApp() {
               </div>
 
               {/* Player Content */}
-              <div className="p-6">
-                <div className="flex items-center justify-between">
-                  {/* Song Info & Artwork */}
-                  <div className="flex items-center space-x-4 flex-1 min-w-0">
+              <div className={`transition-all duration-300 ${isPlayerMinimized ? 'p-3' : 'p-6'}`}>
+                <div className="grid grid-cols-3 items-center gap-4">
+                  {/* Left Section - Song Info & Artwork */}
+                  <div className="flex items-center space-x-4 min-w-0">
                     {/* Album Art Placeholder */}
                     <motion.div 
-                      className="w-16 h-16 bg-gradient-to-br from-pink-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-xl relative overflow-hidden"
+                      className={`${isPlayerMinimized ? 'w-12 h-12' : 'w-16 h-16'} bg-gradient-to-br from-pink-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-xl relative overflow-hidden transition-all duration-300`}
                       animate={{ rotate: isPlaying ? 360 : 0 }}
                       transition={{ duration: 20, repeat: isPlaying ? Infinity : 0, ease: "linear" }}
                     >
-                      <Music className="h-8 w-8 text-white" />
+                      <Music className={`${isPlayerMinimized ? 'h-6 w-6' : 'h-8 w-8'} text-white transition-all duration-300`} />
                       {isPlaying && (
                         <motion.div 
                           className="absolute inset-0 bg-white/20"
@@ -1270,65 +1326,55 @@ export default function MusicRecognitionApp() {
                     {/* Song Details */}
                     <div className="flex-1 min-w-0">
                       <motion.h3 
-                        className="text-xl font-bold text-white truncate mb-1"
+                        className={`${isPlayerMinimized ? 'text-lg' : 'text-xl'} font-bold text-white truncate ${isPlayerMinimized ? 'mb-0' : 'mb-1'} transition-all duration-300`}
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                       >
                         {currentTrack.name}
                       </motion.h3>
-                      <div className="flex items-center space-x-3 text-gray-300">
-                        <div className="flex items-center space-x-2">
-                          <Volume2 className="h-4 w-4" />
-                          <span className="text-sm font-medium">
-                            {formatTime(currentTime)} / {formatTime(duration)}
-                          </span>
+                      {!isPlayerMinimized && (
+                        <div className="flex items-center space-x-3 text-gray-300">
+                          <div className="flex items-center space-x-2">
+                            <Volume2 className="h-4 w-4" />
+                            <span className="text-sm font-medium">
+                              {formatTime(currentTime)} / {formatTime(duration)}
+                            </span>
+                          </div>
+                          {isPlaying && (
+                            <motion.div 
+                              className="flex space-x-1 items-center"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                            >
+                              {[...Array(4)].map((_, i) => (
+                                <motion.div
+                                  key={i}
+                                  className="w-1 bg-gradient-to-t from-pink-500 to-purple-400 rounded-full"
+                                  animate={{
+                                    height: [4, 12, 8, 16, 6],
+                                  }}
+                                  transition={{
+                                    duration: 1.2,
+                                    repeat: Infinity,
+                                    delay: i * 0.1,
+                                    ease: "easeInOut"
+                                  }}
+                                />
+                              ))}
+                            </motion.div>
+                          )}
                         </div>
-                        {isPlaying && (
-                          <motion.div 
-                            className="flex space-x-1 items-center"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                          >
-                            {[...Array(4)].map((_, i) => (
-                              <motion.div
-                                key={i}
-                                className="w-1 bg-gradient-to-t from-pink-500 to-purple-400 rounded-full"
-                                animate={{
-                                  height: [4, 12, 8, 16, 6],
-                                }}
-                                transition={{
-                                  duration: 1.2,
-                                  repeat: Infinity,
-                                  delay: i * 0.1,
-                                  ease: "easeInOut"
-                                }}
-                              />
-                            ))}
-                          </motion.div>
-                        )}
-                      </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Control Buttons */}
-                  <div className="flex items-center space-x-6">
-                    {/* Shuffle Button */}
-                    <motion.button
-                      whileHover={{ scale: 1.1, y: -2 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={shuffleToUnratedSong}
-                      className="group relative p-3 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 transition-all duration-300 shadow-lg hover:shadow-xl"
-                    >
-                      <SkipForward className="h-5 w-5 text-gray-300 group-hover:text-white transition-colors" />
-                      <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-pink-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </motion.button>
-
-                    {/* Main Play/Pause Button */}
+                  {/* Center Section - Main Play Button & Skip */}
+                  <div className="flex justify-center items-center space-x-4">
                     <motion.button
                       whileHover={{ scale: 1.05, y: -3 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={() => setIsPlaying(!isPlaying)}
-                      className="relative group p-4 rounded-3xl bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 shadow-2xl hover:shadow-pink-500/25 transition-all duration-300"
+                      className={`relative group ${isPlayerMinimized ? 'p-3' : 'p-4'} rounded-3xl bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 shadow-2xl hover:shadow-pink-500/25 transition-all duration-300`}
                     >
                       {/* Button glow effect */}
                       <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-pink-500 to-purple-600 blur-lg opacity-50 group-hover:opacity-75 transition-opacity" />
@@ -1344,7 +1390,7 @@ export default function MusicRecognitionApp() {
                               exit={{ scale: 0, rotate: 90 }}
                               transition={{ duration: 0.2 }}
                             >
-                              <Pause className="h-7 w-7 text-white" />
+                              <Pause className={`${isPlayerMinimized ? 'h-5 w-5' : 'h-7 w-7'} text-white transition-all duration-300`} />
                             </motion.div>
                           ) : (
                             <motion.div
@@ -1354,7 +1400,7 @@ export default function MusicRecognitionApp() {
                               exit={{ scale: 0, rotate: 90 }}
                               transition={{ duration: 0.2 }}
                             >
-                              <Play className="h-7 w-7 text-white ml-1" />
+                              <Play className={`${isPlayerMinimized ? 'h-5 w-5' : 'h-7 w-7'} text-white ml-1 transition-all duration-300`} />
                             </motion.div>
                           )}
                         </AnimatePresence>
@@ -1375,6 +1421,35 @@ export default function MusicRecognitionApp() {
                       />
                     </motion.button>
 
+                    {/* Skip Forward Button */}
+                    <motion.button
+                      whileHover={{ scale: 1.1, y: -2 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={shuffleToUnratedSong}
+                      className={`group relative ${isPlayerMinimized ? 'p-2' : 'p-3'} rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 transition-all duration-300 shadow-lg hover:shadow-xl`}
+                    >
+                      <SkipForward className={`${isPlayerMinimized ? 'h-4 w-4' : 'h-5 w-5'} text-gray-300 group-hover:text-white transition-colors`} />
+                      <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-pink-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </motion.button>
+                  </div>
+
+                  {/* Right Section - Other Control Buttons */}
+                  <div className={`flex items-center justify-end ${isPlayerMinimized ? 'space-x-3' : 'space-x-6'}`}>
+                    {/* Minimize/Maximize Button */}
+                    <motion.button
+                      whileHover={{ scale: 1.1, y: -2 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setIsPlayerMinimized(!isPlayerMinimized)}
+                      className="group relative p-2 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 transition-all duration-300 shadow-lg hover:shadow-xl"
+                    >
+                      {isPlayerMinimized ? (
+                        <Maximize2 className="h-4 w-4 text-gray-300 group-hover:text-white transition-colors" />
+                      ) : (
+                        <Minimize2 className="h-4 w-4 text-gray-300 group-hover:text-white transition-colors" />
+                      )}
+                      <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </motion.button>
+
                     {/* Shuffle Mode Toggle */}
                     <motion.button
                       whileHover={{ scale: 1.1, y: -2 }}
@@ -1383,13 +1458,13 @@ export default function MusicRecognitionApp() {
                         setIsShuffleMode(!isShuffleMode);
                         if (!isShuffleMode) shuffleToUnratedSong();
                       }}
-                      className={`group relative p-3 rounded-2xl backdrop-blur-sm border transition-all duration-300 shadow-lg hover:shadow-xl ${
+                      className={`group relative ${isPlayerMinimized ? 'p-2' : 'p-3'} rounded-2xl backdrop-blur-sm border transition-all duration-300 shadow-lg hover:shadow-xl ${
                         isShuffleMode 
                           ? 'bg-gradient-to-r from-pink-500/20 to-purple-500/20 border-pink-500/50' 
                           : 'bg-white/10 hover:bg-white/20 border-white/20'
                       }`}
                     >
-                      <Shuffle className={`h-5 w-5 transition-colors ${
+                      <Shuffle className={`${isPlayerMinimized ? 'h-4 w-4' : 'h-5 w-5'} transition-colors ${
                         isShuffleMode ? 'text-pink-400' : 'text-gray-300 group-hover:text-white'
                       }`} />
                       {isShuffleMode && (
@@ -1403,13 +1478,15 @@ export default function MusicRecognitionApp() {
                   </div>
                 </div>
 
-                {/* Revolutionary Rating System */}
-                <motion.div 
-                  className="mt-6 border-t border-white/10 pt-4"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.4 }}
-                >
+                {/* Revolutionary Rating System - Hidden when minimized */}
+                {!isPlayerMinimized && (
+                  <motion.div 
+                    className="mt-6 border-t border-white/10 pt-4"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ delay: 0.4 }}
+                  >
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-sm font-medium text-gray-300 flex items-center">
                       <Star className="h-4 w-4 mr-2 text-yellow-400" />
@@ -1469,6 +1546,10 @@ export default function MusicRecognitionApp() {
                                : currentTrack?.rating && rating <= currentTrack.rating
                                ? 'bg-gradient-to-r from-yellow-500/90 to-orange-600/90 text-white shadow-lg shadow-yellow-500/30 scale-105'
                                : 'bg-white/15 hover:bg-gradient-to-r hover:from-pink-500/20 hover:to-purple-500/20 text-gray-300 hover:text-white border border-white/20 hover:border-pink-400/50 hover:shadow-lg hover:shadow-pink-500/25'
+                           } ${
+                             ratingFeedback?.rating === rating && ratingFeedback?.show
+                               ? 'ring-4 ring-green-400/60 shadow-2xl shadow-green-500/50'
+                               : ''
                            }`}
                                                      >
                              {/* Number */}
@@ -1499,6 +1580,31 @@ export default function MusicRecognitionApp() {
                                   duration: 2,
                                   repeat: Infinity,
                                   ease: "easeInOut"
+                                }}
+                              />
+                            )}
+
+                            {/* Green Glow Feedback Effect */}
+                            {ratingFeedback?.rating === rating && ratingFeedback?.show && (
+                              <motion.div
+                                className="absolute inset-0 rounded-xl"
+                                initial={{ scale: 1, opacity: 0 }}
+                                animate={{ 
+                                  scale: [1, 1.3, 1.1, 1],
+                                  opacity: [0, 1, 0.8, 0],
+                                  boxShadow: [
+                                    "0 0 0 rgba(34, 197, 94, 0)",
+                                    "0 0 30px rgba(34, 197, 94, 0.8)",
+                                    "0 0 40px rgba(34, 197, 94, 0.6)",
+                                    "0 0 0 rgba(34, 197, 94, 0)"
+                                  ]
+                                }}
+                                transition={{ 
+                                  duration: 1,
+                                  ease: [0.23, 1, 0.32, 1]
+                                }}
+                                style={{
+                                  background: "radial-gradient(circle, rgba(34, 197, 94, 0.4) 0%, rgba(34, 197, 94, 0.1) 50%, transparent 100%)"
                                 }}
                               />
                             )}
@@ -1654,7 +1760,8 @@ export default function MusicRecognitionApp() {
                        )}
                      </div>
                    </motion.div>
-                </motion.div>
+                  </motion.div>
+                )}
               </div>
             </div>
           </motion.div>
