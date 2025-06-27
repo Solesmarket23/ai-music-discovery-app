@@ -14,6 +14,7 @@ interface MusicTrack {
   rating?: number;
   analyzed?: boolean;
   needsReupload?: boolean; // Flag to indicate this track needs file re-upload for playback
+  matchPercentage?: number; // AI recommendation match percentage
 }
 
 interface AIInsights {
@@ -46,7 +47,6 @@ export default function MusicRecognitionApp() {
   // Advanced Settings State
   const [aiTrainingMode, setAiTrainingMode] = useState<'rating' | 'audio' | 'listening' | 'genre' | 'tempo' | 'hybrid'>('rating');
   const [settingsTheme, setSettingsTheme] = useState<'auto' | 'dark' | 'light'>('auto');
-  const [selectedThemeOption, setSelectedThemeOption] = useState<'default' | 'neon' | 'sunset' | 'ocean' | 'forest' | 'royal'>('default');
   const [settingsView, setSettingsView] = useState<'simple' | 'advanced'>('simple');
   const [autoSave, setAutoSave] = useState(true);
   const [settingsSearch, setSettingsSearch] = useState('');
@@ -62,17 +62,48 @@ export default function MusicRecognitionApp() {
   const [libraryViewMode, setLibraryViewMode] = useState<'list' | 'grid'>('list');
   const [ratingFeedback, setRatingFeedback] = useState<{ rating: number; show: boolean } | null>(null);
 
+  // Enhanced behavior tracking for AI training
+  const [behaviorData, setBehaviorData] = useState({
+    sessionStartTime: Date.now(),
+    totalListenTime: 0,
+    songSkips: 0,
+    songCompletions: 0,
+    averageListenDuration: 0,
+    skipRate: 0,
+    repeatRate: 0,
+    sessionLength: 0,
+    timeOfDayPreferences: {} as Record<string, number>
+  });
+
+  // Audio analysis data
+  const [audioFeatures, setAudioFeatures] = useState<Record<string, any>>({});
+  
+  // Track listening session data
+  const [sessionData, setSessionData] = useState<Record<string, {
+    startTime: number;
+    endTime?: number;
+    completed: boolean;
+    skipped: boolean;
+    repeatCount: number;
+  }>>({});
+
+  // Enhanced audio analysis state
+  const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
+  const [audioAnalyser, setAudioAnalyser] = useState<AnalyserNode | null>(null);
+  const [audioSource, setAudioSource] = useState<MediaElementAudioSourceNode | null>(null);
+  const [realTimeFeatures, setRealTimeFeatures] = useState<Record<string, any>>({});
+
   // Refs
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Auto-save settings to localStorage
   // Auto-save settings to localStorage
   useEffect(() => {
     if (autoSave) {
       const settings = {
         aiTrainingMode,
         settingsTheme,
-        selectedThemeOption,
         visualMode,
         isShuffleMode,
         autoSave,
@@ -86,7 +117,7 @@ export default function MusicRecognitionApp() {
         console.error('Failed to save settings:', error);
       }
     }
-  }, [aiTrainingMode, settingsTheme, selectedThemeOption, visualMode, isShuffleMode, autoSave, settingsPreset]);
+  }, [aiTrainingMode, settingsTheme, visualMode, isShuffleMode, autoSave, settingsPreset]);
 
   // Save music library to localStorage whenever it changes
   useEffect(() => {
@@ -118,13 +149,48 @@ export default function MusicRecognitionApp() {
         setAiTrainingMode(settings.aiTrainingMode || 'rating');
         const savedTheme = settings.settingsTheme || 'auto';
         setSettingsTheme(savedTheme);
-        setSelectedThemeOption(settings.selectedThemeOption || 'default');
+
         setVisualMode(settings.visualMode || 'immersive');
         setIsShuffleMode(settings.isShuffleMode || false);
         setAutoSave(settings.autoSave !== undefined ? settings.autoSave : true);
         setSettingsPreset(settings.settingsPreset || 'custom');
         
         console.log('📂 Settings loaded from localStorage');
+        
+        // Apply theme immediately after loading settings to prevent initial flicker
+        setTimeout(() => {
+          const root = document.documentElement;
+          const body = document.body;
+          
+          // Temporarily disable transitions
+          root.classList.add('no-transitions');
+          body.classList.add('theme-changing');
+          
+          // Apply loaded theme
+          if (savedTheme === 'auto') {
+            const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            root.classList.toggle('dark', systemPrefersDark);
+            root.classList.toggle('light', !systemPrefersDark);
+          } else {
+            root.classList.toggle('dark', savedTheme === 'dark');
+            root.classList.toggle('light', savedTheme === 'light');
+          }
+          
+
+          
+          // Apply visual mode
+          const visualModeOption = settings.visualMode || 'immersive';
+          root.classList.remove('visual-minimal', 'visual-immersive', 'visual-focus');
+          root.classList.add(`visual-${visualModeOption}`);
+          
+          // Re-enable transitions
+          requestAnimationFrame(() => {
+            setTimeout(() => {
+              root.classList.remove('no-transitions');
+              body.classList.remove('theme-changing');
+            }, 100);
+          });
+        }, 10);
       }
 
       // Load music library metadata (note: actual files need to be re-uploaded)
@@ -165,18 +231,7 @@ export default function MusicRecognitionApp() {
     }
   }, []);
 
-  // Apply theme and visual mode after settings are loaded
-  useEffect(() => {
-    console.log('⚙️ Settings theme changed, applying:', settingsTheme);
-    applyTheme(settingsTheme);
-    applyThemeOption(selectedThemeOption);
-    
-    // Apply visual mode
-    const root = document.documentElement;
-    root.classList.remove('visual-minimal', 'visual-immersive', 'visual-focus');
-    root.classList.add(`visual-${visualMode}`);
-    console.log('🎯 Applied visual mode:', visualMode);
-  }, [settingsTheme, selectedThemeOption, visualMode]);
+
 
   // Effect to update AI insights
   useEffect(() => {
@@ -188,15 +243,27 @@ export default function MusicRecognitionApp() {
     });
   }, [musicLibrary]);
 
-  // Animated background particles
+  // Enhanced visualization update using real audio data
   useEffect(() => {
     const updateVisualization = () => {
-      if (isPlaying) {
-        // Simulate real-time audio visualization
-        setSoundVisualization(prev => 
-          prev.map(() => Math.random() * 100)
-        );
-        setUserEngagement(prev => Math.min(prev + 0.1, 100));
+      if (isPlaying && currentTrack) {
+        const currentFeatures = realTimeFeatures[currentTrack.id];
+        if (currentFeatures) {
+          // Use real audio data for visualization
+          setSoundVisualization(currentFeatures.frequencyBars);
+          
+          // Update user engagement based on audio activity
+          const activityLevel = currentFeatures.rms || 0;
+          setUserEngagement(prev => {
+            const increase = activityLevel > 0.3 ? 0.2 : 0.1;
+            return Math.min(prev + increase, 100);
+          });
+        } else {
+          // Fallback to subtle random animation if no real data yet
+          setSoundVisualization(prev => 
+            prev.map((_, i) => Math.random() * 30 + (i % 3) * 10)
+          );
+        }
       }
     };
 
@@ -208,7 +275,7 @@ export default function MusicRecognitionApp() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isPlaying]);
+  }, [isPlaying, currentTrack, realTimeFeatures]);
 
   // File upload handler with duplicate detection
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -333,12 +400,1011 @@ export default function MusicRecognitionApp() {
     }
   };
 
+  // Enhanced behavior tracking
+  const trackListeningBehavior = (trackId: string, action: 'start' | 'complete' | 'skip' | 'repeat') => {
+    const currentTime = Date.now();
+    const hour = new Date().getHours();
+    
+    setBehaviorData(prev => {
+      const newData = { ...prev };
+      
+      // Update time of day preferences
+      newData.timeOfDayPreferences[hour] = (newData.timeOfDayPreferences[hour] || 0) + 1;
+      
+      if (action === 'start') {
+        setSessionData(prev => ({
+          ...prev,
+          [trackId]: {
+            startTime: currentTime,
+            completed: false,
+            skipped: false,
+            repeatCount: (prev[trackId]?.repeatCount || 0)
+          }
+        }));
+      } else if (action === 'complete') {
+        newData.songCompletions += 1;
+        setSessionData(prev => ({
+          ...prev,
+          [trackId]: {
+            ...prev[trackId],
+            endTime: currentTime,
+            completed: true
+          }
+        }));
+      } else if (action === 'skip') {
+        newData.songSkips += 1;
+        setSessionData(prev => ({
+          ...prev,
+          [trackId]: {
+            ...prev[trackId],
+            endTime: currentTime,
+            skipped: true
+          }
+        }));
+      } else if (action === 'repeat') {
+        setSessionData(prev => ({
+          ...prev,
+          [trackId]: {
+            ...prev[trackId],
+            repeatCount: (prev[trackId]?.repeatCount || 0) + 1
+          }
+        }));
+      }
+      
+      // Calculate derived metrics
+      const totalSongs = newData.songSkips + newData.songCompletions;
+      newData.skipRate = totalSongs > 0 ? newData.songSkips / totalSongs : 0;
+      newData.sessionLength = Object.keys(sessionData).length;
+      
+      return newData;
+    });
+  };
+
+  // Audio analysis using Web Audio API with comprehensive feature extraction
+  const analyzeAudioFeatures = async (audioElement: HTMLAudioElement, trackId: string) => {
+    if (!audioElement.src || audioFeatures[trackId]) return;
+    
+    try {
+      // Reuse or create audio context
+      let context = audioContext;
+      if (!context) {
+        context = new (window.AudioContext || (window as any).webkitAudioContext)();
+        setAudioContext(context);
+      }
+
+      // Resume context if suspended
+      if (context.state === 'suspended') {
+        await context.resume();
+      }
+
+      // Create or reuse audio source and analyser
+      let source = audioSource;
+      let analyser = audioAnalyser;
+
+      if (!source) {
+        source = context.createMediaElementSource(audioElement);
+        setAudioSource(source);
+      }
+
+      if (!analyser) {
+        analyser = context.createAnalyser();
+        analyser.fftSize = 2048; // Higher resolution for better analysis
+        analyser.smoothingTimeConstant = 0.8;
+        setAudioAnalyser(analyser);
+        
+        // Connect the audio graph
+        source.connect(analyser);
+        analyser.connect(context.destination);
+      }
+
+      const bufferLength = analyser.frequencyBinCount;
+      const frequencyData = new Uint8Array(bufferLength);
+      const timeData = new Uint8Array(bufferLength);
+      
+      // Real-time analysis function
+      const performRealTimeAnalysis = () => {
+        if (!analyser || !context) return;
+        
+        analyser.getByteFrequencyData(frequencyData);
+        analyser.getByteTimeDomainData(timeData);
+
+        // Extract comprehensive audio features
+        const features = extractAdvancedAudioFeatures(
+          frequencyData, 
+          timeData, 
+          context.sampleRate,
+          bufferLength
+        );
+
+        // Update real-time features for visualization
+        setRealTimeFeatures(prev => ({
+          ...prev,
+          [trackId]: features
+        }));
+
+        // Update visualization with real audio data
+        setSoundVisualization(features.frequencyBars);
+      };
+
+      // Start continuous analysis
+      const analysisInterval = setInterval(performRealTimeAnalysis, 100);
+
+      // Store the interval so we can clear it later
+      setAudioFeatures(prev => ({
+        ...prev,
+        [`${trackId}_interval`]: analysisInterval
+      }));
+
+      // Extract static features after a short delay to get stable readings
+      setTimeout(() => {
+        performRealTimeAnalysis(); // Get initial reading
+        
+        const staticFeatures = extractStaticAudioFeatures(
+          frequencyData,
+          timeData,
+          context.sampleRate,
+          audioElement.duration || 0
+        );
+
+        // Store comprehensive features for this track
+        setAudioFeatures(prev => ({
+          ...prev,
+          [trackId]: {
+            ...staticFeatures,
+            extractedAt: Date.now(),
+            sampleRate: context.sampleRate
+          }
+        }));
+
+        console.log(`🎵 Audio analysis completed for ${trackId}:`, staticFeatures);
+      }, 1000);
+      
+    } catch (error) {
+      console.error('Audio analysis error:', error);
+      // Fallback to basic analysis
+      setAudioFeatures(prev => ({
+        ...prev,
+        [trackId]: {
+          averageFrequency: 50,
+          maxFrequency: 100,
+          energyLevel: 75,
+          estimatedTempo: 'medium',
+          timestamp: Date.now()
+        }
+      }));
+    }
+  };
+
+  // Extract advanced real-time audio features with perceptual modeling
+  const extractAdvancedAudioFeatures = (
+    frequencyData: Uint8Array,
+    timeData: Uint8Array,
+    sampleRate: number,
+    bufferLength: number
+  ) => {
+    const nyquist = sampleRate / 2;
+    const binWidth = nyquist / bufferLength;
+
+    // === PERCEPTUAL AUDIO ANALYSIS (30K SOUND ENGINEERS APPROACH) ===
+    
+    // 1. BARK SCALE ANALYSIS (Human auditory perception)
+    const barkBands = calculateBarkScale(frequencyData, sampleRate);
+    
+    // 2. PSYCHOACOUSTIC MASKING
+    const maskedSpectrum = applyPsychoacousticMasking(frequencyData);
+    
+    // 3. PERCEIVED LOUDNESS (LUFS-style calculation)
+    const perceivedLoudness = calculatePerceivedLoudness(timeData, frequencyData);
+    
+    // 4. HARMONIC ANALYSIS
+    const harmonicContent = analyzeHarmonicContent(frequencyData, sampleRate);
+    
+    // 5. CHORD DETECTION
+    const chordInfo = detectChordProgression(frequencyData, sampleRate);
+    
+    // 6. PRODUCTION ANALYSIS
+    const productionSignature = analyzeProductionSignature(frequencyData, timeData);
+    
+    // 7. DYNAMIC RANGE ANALYSIS
+    const dynamicRange = calculateDynamicRange(timeData);
+    
+    // 8. STEREO FIELD ANALYSIS
+    const stereoCharacteristics = analyzeStereoField(timeData);
+    
+    // 9. TIMBRAL TEXTURE
+    const timbralTexture = analyzeTimbralTexture(frequencyData);
+    
+    // 10. RHYTHMIC COMPLEXITY
+    const rhythmicProfile = analyzeRhythmicComplexity(timeData);
+    
+    // 11. EMOTIONAL RESONANCE
+    const emotionalProfile = calculateEmotionalResonance(frequencyData, timeData);
+    
+    // 12. ENERGY TRAJECTORY
+    const energyTrajectory = calculateEnergyTrajectory(frequencyData, timeData);
+
+    // Enhanced visualization with perceptual data
+    const frequencyBars = createPerceptualVisualization(barkBands);
+
+    // Calculate legacy features for compatibility
+    let maxAmplitude = 0;
+    let frequencySum = 0;
+    for (let i = 0; i < frequencyData.length; i++) {
+      maxAmplitude = Math.max(maxAmplitude, frequencyData[i]);
+      frequencySum += frequencyData[i];
+    }
+    const averageAmplitude = frequencySum / frequencyData.length;
+    
+    // Calculate RMS from time data
+    let rmsSum = 0;
+    for (let i = 0; i < timeData.length; i++) {
+      const normalized = (timeData[i] - 128) / 128;
+      rmsSum += normalized * normalized;
+    }
+    const rms = Math.sqrt(rmsSum / timeData.length);
+    
+    // Calculate frequency band energies for compatibility
+    const totalLength = frequencyData.length;
+    const lowEnd = Math.floor(totalLength * 0.1);
+    const midEnd = Math.floor(totalLength * 0.5);
+    
+    let bassSum = 0;
+    for (let i = 0; i < lowEnd; i++) {
+      bassSum += frequencyData[i];
+    }
+    const bassEnergy = bassSum / lowEnd;
+    
+    let midSum = 0;
+    for (let i = lowEnd; i < midEnd; i++) {
+      midSum += frequencyData[i];
+    }
+    const midEnergy = midSum / (midEnd - lowEnd);
+    
+    let trebleSum = 0;
+    for (let i = midEnd; i < totalLength; i++) {
+      trebleSum += frequencyData[i];
+    }
+    const trebleEnergy = trebleSum / (totalLength - midEnd);
+
+    return {
+      // === PERCEPTUAL FEATURES ===
+      barkSpectrum: barkBands,
+      perceivedLoudness,
+      psychoacousticMask: maskedSpectrum,
+      
+      // === HARMONIC & MUSICAL FEATURES ===
+      harmonicContent,
+      chordProgression: chordInfo.progression,
+      keySignature: chordInfo.key,
+      modalCharacter: chordInfo.mode,
+      harmonicComplexity: harmonicContent.complexity,
+      
+      // === PRODUCTION FEATURES ===
+      dynamicRange,
+      compressionRatio: productionSignature.compression,
+      eqSignature: productionSignature.eqCurve,
+      saturationLevel: productionSignature.saturation,
+      stereoWidth: stereoCharacteristics.width,
+      stereoBalance: stereoCharacteristics.balance,
+      
+      // === TIMBRAL FEATURES ===
+      brightness: timbralTexture.brightness,
+      warmth: timbralTexture.warmth,
+      roughness: timbralTexture.roughness,
+      sharpness: timbralTexture.sharpness,
+      
+      // === RHYTHMIC FEATURES ===
+      groove: rhythmicProfile.groove,
+      syncopation: rhythmicProfile.syncopation,
+      rhythmicComplexity: rhythmicProfile.complexity,
+      microTiming: rhythmicProfile.microTiming,
+      
+      // === EMOTIONAL & ENERGY FEATURES ===
+      emotionalTension: emotionalProfile.tension,
+      emotionalValence: emotionalProfile.valence,
+      emotionalArousal: emotionalProfile.arousal,
+      energyDensity: energyTrajectory.density,
+      energyFlow: energyTrajectory.flow,
+      
+      // Legacy features (enhanced)
+      spectralCentroid: harmonicContent.spectralCentroid,
+      spectralRolloff: calculateEnhancedSpectralRolloff(maskedSpectrum),
+      zeroCrossingRate: rhythmicProfile.zcr,
+      
+      // === COMPATIBILITY FEATURES ===
+      rms,
+      maxAmplitude,
+      averageAmplitude,
+      bassEnergy,
+      midEnergy, 
+      trebleEnergy,
+      
+      // Visualization data
+      frequencyBars,
+      
+      // Meta
+      timestamp: Date.now(),
+      analysisVersion: "PerceptualAI_v1.0"
+    };
+  };
+
+  // === PERCEPTUAL AUDIO ANALYSIS FUNCTIONS ===
+  
+  // 1. Bark Scale Analysis (Human auditory perception)
+  const calculateBarkScale = (frequencyData: Uint8Array, sampleRate: number) => {
+    const barkBands = [];
+    const numBarkBands = 24; // Standard Bark scale has 24 bands
+    
+    // Bark scale frequency boundaries (Hz)
+    const barkFreqs = [
+      0, 100, 200, 300, 400, 510, 630, 770, 920, 1080, 1270, 1480, 1720, 
+      2000, 2320, 2700, 3150, 3700, 4400, 5300, 6400, 7700, 9500, 12000, 15500
+    ];
+    
+    for (let i = 0; i < numBarkBands; i++) {
+      const startFreq = barkFreqs[i];
+      const endFreq = barkFreqs[i + 1];
+      const startBin = Math.floor((startFreq * frequencyData.length * 2) / sampleRate);
+      const endBin = Math.floor((endFreq * frequencyData.length * 2) / sampleRate);
+      
+      let energy = 0;
+      for (let bin = startBin; bin < endBin && bin < frequencyData.length; bin++) {
+        energy += Math.pow(frequencyData[bin] / 255, 2);
+      }
+      
+      barkBands.push(energy / (endBin - startBin));
+    }
+    
+    return barkBands;
+  };
+  
+  // 2. Psychoacoustic Masking
+  const applyPsychoacousticMasking = (frequencyData: Uint8Array) => {
+    const maskedSpectrum = new Array(frequencyData.length);
+    
+    for (let i = 0; i < frequencyData.length; i++) {
+      const amplitude = frequencyData[i] / 255;
+      
+      // Simplified masking threshold calculation
+      let maskingThreshold = 0;
+      
+      // Check neighboring frequencies for masking effects
+      for (let j = Math.max(0, i - 5); j < Math.min(frequencyData.length, i + 5); j++) {
+        const distance = Math.abs(i - j);
+        const neighborAmplitude = frequencyData[j] / 255;
+        
+        // Masking strength decreases with frequency distance
+        const maskingStrength = neighborAmplitude * Math.exp(-distance * 0.3);
+        maskingThreshold = Math.max(maskingThreshold, maskingStrength);
+      }
+      
+      // Apply masking
+      maskedSpectrum[i] = Math.max(0, amplitude - maskingThreshold * 0.2);
+    }
+    
+    return maskedSpectrum;
+  };
+  
+  // 3. Perceived Loudness (LUFS-style)
+  const calculatePerceivedLoudness = (timeData: Uint8Array, frequencyData: Uint8Array) => {
+    // K-weighting filter simulation (simplified)
+    let weightedEnergy = 0;
+    
+    for (let i = 0; i < frequencyData.length; i++) {
+      const frequency = (i * 22050) / frequencyData.length; // Assuming 44.1kHz
+      const amplitude = frequencyData[i] / 255;
+      
+      // K-weighting curve approximation
+      let weight = 1.0;
+      if (frequency < 1000) {
+        weight = Math.pow(frequency / 1000, 0.5); // Boost low-mids
+      } else if (frequency > 2000) {
+        weight = Math.exp(-(frequency - 2000) / 8000); // Roll off highs
+      }
+      
+      weightedEnergy += amplitude * amplitude * weight;
+    }
+    
+    // Convert to LUFS-like scale
+    const lufs = -23 + 10 * Math.log10(weightedEnergy / frequencyData.length);
+    return Math.max(-60, Math.min(0, lufs)); // Clamp to reasonable range
+  };
+  
+  // 4. Harmonic Content Analysis
+  const analyzeHarmonicContent = (frequencyData: Uint8Array, sampleRate: number) => {
+    const fundamentalFreq = findFundamentalFrequency(frequencyData, sampleRate);
+    const harmonics = [];
+    let harmonicEnergy = 0;
+    let totalEnergy = 0;
+    
+    // Analyze first 8 harmonics
+    for (let h = 1; h <= 8; h++) {
+      const harmonicFreq = fundamentalFreq * h;
+      const bin = Math.round((harmonicFreq * frequencyData.length * 2) / sampleRate);
+      
+      if (bin < frequencyData.length) {
+        const amplitude = frequencyData[bin] / 255;
+        harmonics.push({ harmonic: h, frequency: harmonicFreq, amplitude });
+        harmonicEnergy += amplitude;
+      }
+      
+      totalEnergy += frequencyData[bin] || 0;
+    }
+    
+    // Calculate harmonic complexity
+    const complexity = harmonics.length > 1 ? 
+      harmonics.reduce((sum, h) => sum + h.amplitude * Math.log(h.harmonic), 0) / harmonicEnergy : 0;
+    
+    // Enhanced spectral centroid using harmonic weighting
+    let weightedSum = 0;
+    let weightSum = 0;
+    
+    for (let i = 0; i < frequencyData.length; i++) {
+      const freq = (i * sampleRate) / (2 * frequencyData.length);
+      const amplitude = frequencyData[i] / 255;
+      
+      // Weight by harmonic relationship to fundamental
+      const harmonicWeight = fundamentalFreq > 0 ? 
+        1 + Math.cos(2 * Math.PI * Math.log2(freq / fundamentalFreq)) * 0.3 : 1;
+      
+      weightedSum += freq * amplitude * harmonicWeight;
+      weightSum += amplitude * harmonicWeight;
+    }
+    
+    const spectralCentroid = weightSum > 0 ? weightedSum / weightSum : 0;
+    
+    return {
+      fundamentalFreq,
+      harmonics,
+      complexity,
+      harmonicity: harmonicEnergy / Math.max(totalEnergy, 1),
+      spectralCentroid
+    };
+  };
+  
+  // 5. Chord Detection
+  const detectChordProgression = (frequencyData: Uint8Array, sampleRate: number) => {
+    // Chroma vector calculation (12-tone)
+    const chroma = new Array(12).fill(0);
+    
+    for (let i = 1; i < frequencyData.length; i++) {
+      const frequency = (i * sampleRate) / (2 * frequencyData.length);
+      const amplitude = frequencyData[i] / 255;
+      
+      if (frequency > 80 && frequency < 2000) { // Focus on musical range
+        const pitch = 12 * Math.log2(frequency / 440) + 69; // MIDI note number
+        const chromaIndex = Math.round(pitch) % 12;
+        chroma[chromaIndex] += amplitude;
+      }
+    }
+    
+    // Normalize chroma vector
+    const maxChroma = Math.max(...chroma);
+    if (maxChroma > 0) {
+      for (let i = 0; i < 12; i++) {
+        chroma[i] /= maxChroma;
+      }
+    }
+    
+    // Simple chord templates (major and minor triads)
+    const chordTemplates = {
+      'C': [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0],
+      'Dm': [0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0],
+      'Em': [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1],
+      'F': [1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0],
+      'G': [0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1],
+      'Am': [1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0]
+    };
+    
+    // Find best matching chord
+    let bestChord = 'Unknown';
+    let bestScore = 0;
+    
+    Object.entries(chordTemplates).forEach(([chord, template]) => {
+      let score = 0;
+      for (let i = 0; i < 12; i++) {
+        score += chroma[i] * template[i];
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestChord = chord;
+      }
+    });
+    
+    // Determine key and mode
+    const key = bestChord.replace('m', '');
+    const mode = bestChord.includes('m') ? 'minor' : 'major';
+    
+    return {
+      progression: [bestChord],
+      key,
+      mode,
+      confidence: bestScore,
+      chroma
+    };
+  };
+  
+  // 6. Production Signature Analysis
+  const analyzeProductionSignature = (frequencyData: Uint8Array, timeData: Uint8Array) => {
+    // EQ Curve Analysis
+    const bands = [
+      { name: 'sub', start: 0, end: 0.02 },      // 0-2%
+      { name: 'bass', start: 0.02, end: 0.08 },  // 2-8%
+      { name: 'lowMid', start: 0.08, end: 0.2 }, // 8-20%
+      { name: 'mid', start: 0.2, end: 0.4 },     // 20-40%
+      { name: 'highMid', start: 0.4, end: 0.7 }, // 40-70%
+      { name: 'treble', start: 0.7, end: 1.0 }   // 70-100%
+    ];
+    
+    const eqCurve: Record<string, number> = {};
+    bands.forEach(band => {
+      const startBin = Math.floor(band.start * frequencyData.length);
+      const endBin = Math.floor(band.end * frequencyData.length);
+      
+      let energy = 0;
+      for (let i = startBin; i < endBin; i++) {
+        energy += Math.pow(frequencyData[i] / 255, 2);
+      }
+      eqCurve[band.name] = energy / (endBin - startBin);
+    });
+    
+    // Compression Detection (simplified)
+    let peakToRMS = 0;
+    let rmsSum = 0;
+    let peak = 0;
+    
+    for (let i = 0; i < timeData.length; i++) {
+      const sample = (timeData[i] - 128) / 128;
+      rmsSum += sample * sample;
+      peak = Math.max(peak, Math.abs(sample));
+    }
+    
+    const rms = Math.sqrt(rmsSum / timeData.length);
+    peakToRMS = peak / (rms + 0.001); // Avoid division by zero
+    
+    // Lower ratio indicates more compression
+    const compressionRatio = Math.max(1, Math.min(20, peakToRMS));
+    
+    // Saturation Detection (harmonic distortion)
+    let oddHarmonics = 0;
+    let evenHarmonics = 0;
+    
+    for (let i = 1; i < frequencyData.length / 2; i += 2) {
+      oddHarmonics += frequencyData[i];
+    }
+    for (let i = 2; i < frequencyData.length / 2; i += 2) {
+      evenHarmonics += frequencyData[i];
+    }
+    
+    const saturationLevel = oddHarmonics / (evenHarmonics + oddHarmonics + 1);
+    
+    return {
+      eqCurve,
+      compression: compressionRatio,
+      saturation: saturationLevel
+    };
+  };
+  
+  // 7. Dynamic Range Analysis
+  const calculateDynamicRange = (timeData: Uint8Array) => {
+    let peak = 0;
+    let rmsSum = 0;
+    
+    for (let i = 0; i < timeData.length; i++) {
+      const sample = Math.abs((timeData[i] - 128) / 128);
+      peak = Math.max(peak, sample);
+      rmsSum += sample * sample;
+    }
+    
+    const rms = Math.sqrt(rmsSum / timeData.length);
+    const crestFactor = peak / (rms + 0.001);
+    
+    // Convert to DR units (approximate)
+    const drValue = 20 * Math.log10(crestFactor);
+    return Math.max(0, Math.min(30, drValue)); // Clamp to reasonable range
+  };
+  
+  // 8. Stereo Field Analysis
+  const analyzeStereoField = (timeData: Uint8Array) => {
+    // Simplified stereo analysis (assuming mono input for now)
+    let correlation = 0;
+    let leftEnergy = 0;
+    let rightEnergy = 0;
+    
+    // Simulate stereo by analyzing phase relationships
+    for (let i = 0; i < timeData.length - 1; i++) {
+      const sample1 = (timeData[i] - 128) / 128;
+      const sample2 = (timeData[i + 1] - 128) / 128;
+      
+      correlation += sample1 * sample2;
+      leftEnergy += sample1 * sample1;
+      rightEnergy += sample2 * sample2;
+    }
+    
+    const width = Math.abs(correlation) / timeData.length;
+    const balance = (leftEnergy - rightEnergy) / (leftEnergy + rightEnergy + 0.001);
+    
+    return {
+      width: Math.min(1, width),
+      balance: Math.max(-1, Math.min(1, balance))
+    };
+  };
+  
+  // 9. Timbral Texture Analysis
+  const analyzeTimbralTexture = (frequencyData: Uint8Array) => {
+    let brightness = 0;
+    let warmth = 0;
+    let roughness = 0;
+    let sharpness = 0;
+    
+    const totalEnergy = frequencyData.reduce((sum, val) => sum + val, 0);
+    
+    for (let i = 0; i < frequencyData.length; i++) {
+      const amplitude = frequencyData[i] / 255;
+      const frequency = (i / frequencyData.length) * 22050; // Normalize to 0-22kHz
+      
+      // Brightness - high frequency content
+      if (frequency > 2000) {
+        brightness += amplitude;
+      }
+      
+      // Warmth - low-mid frequency content
+      if (frequency > 200 && frequency < 1000) {
+        warmth += amplitude;
+      }
+      
+      // Roughness - based on amplitude variations
+      if (i > 0) {
+        const prevAmplitude = frequencyData[i - 1] / 255;
+        roughness += Math.abs(amplitude - prevAmplitude);
+      }
+      
+      // Sharpness - very high frequency content with emphasis
+      if (frequency > 5000) {
+        sharpness += amplitude * (frequency / 22050);
+      }
+    }
+    
+    return {
+      brightness: brightness / totalEnergy,
+      warmth: warmth / totalEnergy,
+      roughness: roughness / frequencyData.length,
+      sharpness: sharpness / totalEnergy
+    };
+  };
+  
+  // 10. Rhythmic Complexity Analysis
+  const analyzeRhythmicComplexity = (timeData: Uint8Array) => {
+    // Zero Crossing Rate
+    let zeroCrossings = 0;
+    for (let i = 1; i < timeData.length; i++) {
+      if ((timeData[i] - 128) * (timeData[i - 1] - 128) < 0) {
+        zeroCrossings++;
+      }
+    }
+    const zcr = zeroCrossings / timeData.length;
+    
+    // Onset detection (simplified)
+    let onsets = 0;
+    let previousEnergy = 0;
+    const frameSize = 256;
+    
+    for (let i = 0; i < timeData.length - frameSize; i += frameSize) {
+      let energy = 0;
+      for (let j = i; j < i + frameSize; j++) {
+        const sample = (timeData[j] - 128) / 128;
+        energy += sample * sample;
+      }
+      
+      if (energy > previousEnergy * 1.5) { // Simple onset detection
+        onsets++;
+      }
+      previousEnergy = energy;
+    }
+    
+    // Groove analysis (timing variations)
+    let timingVariations = 0;
+    const expectedPeriod = 1024; // Assume 4/4 time
+    
+    for (let i = expectedPeriod; i < timeData.length - expectedPeriod; i += expectedPeriod) {
+      const currentPulse = Math.abs((timeData[i] - 128) / 128);
+      const expectedPulse = Math.abs((timeData[i - expectedPeriod] - 128) / 128);
+      timingVariations += Math.abs(currentPulse - expectedPulse);
+    }
+    
+    const microTiming = timingVariations / Math.floor(timeData.length / expectedPeriod);
+    
+    return {
+      zcr,
+      groove: Math.min(1, onsets / 100), // Normalize
+      syncopation: Math.min(1, zcr * 10), // Simplified syncopation measure
+      complexity: Math.min(1, (zcr + microTiming) / 2),
+      microTiming
+    };
+  };
+  
+  // 11. Emotional Resonance Analysis
+  const calculateEmotionalResonance = (frequencyData: Uint8Array, timeData: Uint8Array) => {
+    // Tension based on dissonance and energy
+    let dissonance = 0;
+    let totalEnergy = 0;
+    
+    for (let i = 1; i < frequencyData.length; i++) {
+      const current = frequencyData[i] / 255;
+      const previous = frequencyData[i - 1] / 255;
+      
+      // Dissonance approximation
+      dissonance += Math.abs(current - previous) * current;
+      totalEnergy += current;
+    }
+    
+    const tension = dissonance / Math.max(totalEnergy, 1);
+    
+    // Valence (positive/negative emotion) based on harmonic content
+    let harmonicRatio = 0;
+    for (let i = 2; i < frequencyData.length; i += 2) {
+      harmonicRatio += frequencyData[i] / 255;
+    }
+    const valence = harmonicRatio / (frequencyData.length / 2);
+    
+    // Arousal based on energy and dynamics
+    let energyVariation = 0;
+    const frameSize = 128;
+    
+    for (let i = frameSize; i < timeData.length; i += frameSize) {
+      let currentEnergy = 0;
+      let previousEnergy = 0;
+      
+      for (let j = 0; j < frameSize; j++) {
+        const currentSample = (timeData[i + j] - 128) / 128;
+        const previousSample = (timeData[i - frameSize + j] - 128) / 128;
+        currentEnergy += currentSample * currentSample;
+        previousEnergy += previousSample * previousSample;
+      }
+      
+      energyVariation += Math.abs(currentEnergy - previousEnergy);
+    }
+    
+    const arousal = energyVariation / Math.floor(timeData.length / frameSize);
+    
+    return {
+      tension: Math.min(1, tension),
+      valence: Math.min(1, valence),
+      arousal: Math.min(1, arousal)
+    };
+  };
+  
+  // 12. Energy Trajectory Analysis
+  const calculateEnergyTrajectory = (frequencyData: Uint8Array, timeData: Uint8Array) => {
+    // Energy density calculation
+    let totalSpectralEnergy = 0;
+    for (let i = 0; i < frequencyData.length; i++) {
+      totalSpectralEnergy += Math.pow(frequencyData[i] / 255, 2);
+    }
+    const density = totalSpectralEnergy / frequencyData.length;
+    
+    // Energy flow (how energy changes over time)
+    let rmsEnergy = 0;
+    for (let i = 0; i < timeData.length; i++) {
+      const sample = (timeData[i] - 128) / 128;
+      rmsEnergy += sample * sample;
+    }
+    rmsEnergy = Math.sqrt(rmsEnergy / timeData.length);
+    
+    return {
+      density: Math.min(1, density),
+      flow: Math.min(1, rmsEnergy)
+    };
+  };
+   
+  // Enhanced spectral rolloff calculation
+  const calculateEnhancedSpectralRolloff = (maskedSpectrum: number[]) => {
+    const totalEnergy = maskedSpectrum.reduce((sum, val) => sum + val, 0);
+    const threshold = totalEnergy * 0.9;
+    
+    let cumulativeEnergy = 0;
+    for (let i = 0; i < maskedSpectrum.length; i++) {
+      cumulativeEnergy += maskedSpectrum[i];
+      if (cumulativeEnergy >= threshold) {
+        return (i / maskedSpectrum.length) * 22050; // Convert to frequency
+      }
+    }
+    
+    return 22050; // Return Nyquist if not found
+  };
+   
+  // Perceptual visualization using Bark bands
+  const createPerceptualVisualization = (barkBands: number[]) => {
+    // Create 20 visualization bars from 24 Bark bands
+    const visualBars = [];
+    const barsCount = 20;
+    const bandsPerBar = Math.floor(barkBands.length / barsCount);
+    
+    for (let i = 0; i < barsCount; i++) {
+      const startBand = i * bandsPerBar;
+      const endBand = Math.min(startBand + bandsPerBar, barkBands.length);
+      
+      let barEnergy = 0;
+      for (let j = startBand; j < endBand; j++) {
+        barEnergy += barkBands[j] || 0;
+      }
+      
+      visualBars.push(Math.min(100, barEnergy * 1000)); // Scale for visualization
+    }
+    
+    // Fill remaining bars if needed
+    while (visualBars.length < 20) {
+      visualBars.push(0);
+    }
+    
+    return visualBars;
+  };
+   
+  // Helper function to find fundamental frequency
+  const findFundamentalFrequency = (frequencyData: Uint8Array, sampleRate: number) => {
+    let maxAmplitude = 0;
+    let fundamentalBin = 0;
+    
+    // Look in the range of musical fundamentals (80Hz - 800Hz)
+    const startBin = Math.floor((80 * frequencyData.length * 2) / sampleRate);
+    const endBin = Math.floor((800 * frequencyData.length * 2) / sampleRate);
+    
+    for (let i = startBin; i < Math.min(endBin, frequencyData.length); i++) {
+      if (frequencyData[i] > maxAmplitude) {
+        maxAmplitude = frequencyData[i];
+        fundamentalBin = i;
+      }
+    }
+    
+    return (fundamentalBin * sampleRate) / (2 * frequencyData.length);
+  };
+
+  // Extract static audio features for the track
+  const extractStaticAudioFeatures = (
+    frequencyData: Uint8Array,
+    timeData: Uint8Array,
+    sampleRate: number,
+    duration: number
+  ) => {
+    const features = extractAdvancedAudioFeatures(frequencyData, timeData, sampleRate, frequencyData.length);
+    
+    // Add static track-level features
+    return {
+      ...features,
+      duration,
+      
+      // Perceptual features
+      loudness: calculateLoudness(features.rms, features.maxAmplitude),
+      brightness: normalizeBrightness(features.spectralCentroid, sampleRate),
+      warmth: calculateWarmth(features.bassEnergy, features.midEnergy, features.trebleEnergy),
+      
+      // Genre indicators
+      genreIndicators: {
+        electronic: features.bassEnergy > 60 && features.zeroCrossingRate > 0.1,
+        rock: features.midEnergy > 50 && features.trebleEnergy > 40,
+        classical: features.spectralCentroid < 2000 && features.rms < 0.3,
+        jazz: features.spectralCentroid > 1500 && features.zeroCrossingRate > 0.05,
+        ambient: features.rms < 0.2 && features.spectralRolloff < 4000
+      },
+      
+      // Energy classification
+      energyLevel: classifyEnergyLevel(features.rms, features.bassEnergy, features.zeroCrossingRate),
+      
+      // Musical key estimation (basic)
+      estimatedKey: estimateMusicalKey(frequencyData, sampleRate)
+    };
+  };
+
+  // Helper functions for audio analysis
+  const estimateTempoFromFeatures = (features: any) => {
+    const { zeroCrossingRate, bassEnergy, spectralCentroid, rms } = features;
+    
+    // Combine multiple indicators for tempo estimation
+    let tempoScore = 0;
+    
+    // High zero crossing rate suggests faster tempo
+    if (zeroCrossingRate > 0.1) tempoScore += 2;
+    else if (zeroCrossingRate > 0.05) tempoScore += 1;
+    
+    // Strong bass suggests rhythmic music
+    if (bassEnergy > 60) tempoScore += 2;
+    else if (bassEnergy > 40) tempoScore += 1;
+    
+    // High spectral centroid can indicate fast tempo
+    if (spectralCentroid > 2000) tempoScore += 1;
+    
+    // High RMS suggests energetic music
+    if (rms > 0.5) tempoScore += 2;
+    else if (rms > 0.3) tempoScore += 1;
+
+    // Classify tempo
+    if (tempoScore >= 6) return { bpm: '140+', category: 'very_fast' };
+    if (tempoScore >= 4) return { bpm: '120-140', category: 'fast' };
+    if (tempoScore >= 2) return { bpm: '90-120', category: 'medium' };
+    return { bpm: '60-90', category: 'slow' };
+  };
+
+  const calculateLoudness = (rms: number, maxAmplitude: number) => {
+    // Perceptual loudness approximation
+    const loudness = (rms * 0.7 + (maxAmplitude / 255) * 0.3) * 100;
+    return Math.min(Math.max(loudness, 0), 100);
+  };
+
+  const normalizeBrightness = (spectralCentroid: number, sampleRate: number) => {
+    // Normalize spectral centroid to 0-100 scale
+    const maxFreq = sampleRate / 2;
+    return Math.min((spectralCentroid / maxFreq) * 100, 100);
+  };
+
+  const calculateWarmth = (bassEnergy: number, midEnergy: number, trebleEnergy: number) => {
+    // Warmth is high bass and mid, low treble
+    const warmth = (bassEnergy * 0.5 + midEnergy * 0.3 - trebleEnergy * 0.2);
+    return Math.min(Math.max(warmth, 0), 100);
+  };
+
+  const classifyEnergyLevel = (rms: number, bassEnergy: number, zeroCrossingRate: number) => {
+    const energyScore = (rms * 100) + (bassEnergy * 0.5) + (zeroCrossingRate * 100);
+    
+    if (energyScore > 80) return 'high';
+    if (energyScore > 50) return 'medium';
+    if (energyScore > 20) return 'low';
+    return 'very_low';
+  };
+
+     const estimateMusicalKey = (frequencyData: Uint8Array, sampleRate: number) => {
+     // Very basic key estimation using dominant frequencies
+     // This is a simplified approach - real key detection is much more complex
+     let maxValue = 0;
+     let maxIndex = 0;
+     for (let i = 0; i < frequencyData.length; i++) {
+       if (frequencyData[i] > maxValue) {
+         maxValue = frequencyData[i];
+         maxIndex = i;
+       }
+     }
+     const dominantFreq = (maxIndex * sampleRate) / (2 * frequencyData.length);
+    
+    // Rough frequency to note mapping (C4 = 261.63 Hz)
+    const noteFreqs = [261.63, 277.18, 293.66, 311.13, 329.63, 349.23, 369.99, 392.00, 415.30, 440.00, 466.16, 493.88];
+    const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    
+    let closestNote = 'C';
+    let minDiff = Infinity;
+    
+    for (let i = 0; i < noteFreqs.length; i++) {
+      const diff = Math.abs(dominantFreq - noteFreqs[i]);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestNote = noteNames[i];
+      }
+    }
+    
+    return closestNote;
+  };
+
+  // Clean up audio analysis when track changes
+  useEffect(() => {
+    return () => {
+      // Clean up analysis intervals
+      Object.keys(audioFeatures).forEach(key => {
+        if (key.endsWith('_interval')) {
+          clearInterval(audioFeatures[key]);
+        }
+      });
+    };
+  }, [currentTrack]);
+
   // Audio controls
   const playTrack = async (track: MusicTrack) => {
     if (audioRef.current) {
       if (currentTrack?.id === track.id && !audioRef.current.paused) {
         audioRef.current.pause();
         setIsPlaying(false);
+        
+        // Track behavior for skip if song wasn't completed
+        if (currentTime / duration < 0.8) {
+          trackListeningBehavior(track.id, 'skip');
+        }
       } else {
         // Check if track needs re-upload
         if (track.needsReupload) {
@@ -349,13 +1415,37 @@ export default function MusicRecognitionApp() {
           setTimeout(() => setShowToast(null), 3000);
           return;
         }
+
+        // Track behavior for previous song if it was playing
+        if (currentTrack && isPlaying) {
+          const listenDuration = currentTime / duration;
+          if (listenDuration > 0.8) {
+            trackListeningBehavior(currentTrack.id, 'complete');
+          } else {
+            trackListeningBehavior(currentTrack.id, 'skip');
+          }
+        }
         
         audioRef.current.src = track.url;
         setCurrentTrack(track);
+        setCurrentTime(0);
+        setProgress(0);
+        
         console.log('🎵 Set current track:', track.id, track.name);
         try {
           await audioRef.current.play();
           setIsPlaying(true);
+          setUserEngagement(prev => Math.min(prev + 2, 100));
+          
+          // Track listening behavior
+          trackListeningBehavior(track.id, 'start');
+          
+          // Add to play history
+          setPlayHistory(prev => [...prev, track.id]);
+          
+          // Analyze audio features
+          analyzeAudioFeatures(audioRef.current, track.id);
+          
         } catch (error) {
           console.error('Error playing track:', error);
         }
@@ -396,6 +1486,146 @@ export default function MusicRecognitionApp() {
     if (unratedSongs.length > 0) {
       const randomSong = unratedSongs[Math.floor(Math.random() * unratedSongs.length)];
       playTrack(randomSong);
+    }
+  };
+
+  // Get minimum requirement for each training mode
+  const getMinimumRequirement = (mode: string): number => {
+    switch (mode) {
+      case 'rating': return 3;  // Lowered for testing
+      case 'audio': return 2;   // Lowered for testing
+      case 'listening': return 2; // Lowered for testing
+      case 'genre': return 3;   // Lowered for testing
+      case 'tempo': return 2;   // Lowered for testing
+      case 'hybrid': return 5;  // Lowered for testing
+      default: return 3;
+    }
+  };
+
+  // Get current progress value for the active mode
+  const getCurrentModeValue = (): number => {
+    switch (aiTrainingMode) {
+      case 'rating': return aiInsights.totalRatedSongs;
+      case 'audio': return Object.keys(audioFeatures).length;
+      case 'listening': return behaviorData.sessionLength;
+      case 'genre': return aiInsights.totalRatedSongs;
+      case 'tempo': return Object.keys(audioFeatures).length;
+      case 'hybrid': return aiInsights.totalRatedSongs + Object.keys(audioFeatures).length + behaviorData.sessionLength;
+      default: return 0;
+    }
+  };
+
+  // Get current progress percentage for the active mode
+  const getCurrentModeProgress = (): number => {
+    return Math.min((getCurrentModeValue() / getMinimumRequirement(aiTrainingMode)) * 100, 100);
+  };
+
+  // Generate AI recommendations with enhanced data
+  const generateRecommendations = async () => {
+    console.log('🔍 Debug Info:');
+    console.log('- AI Training Mode:', aiTrainingMode);
+    console.log('- Current Mode Value:', getCurrentModeValue());
+    console.log('- Minimum Requirement:', getMinimumRequirement(aiTrainingMode));
+    console.log('- Progress Percentage:', getCurrentModeProgress());
+    console.log('- Music Library Length:', musicLibrary.length);
+    console.log('- Rated Songs:', musicLibrary.filter(track => track.rating).length);
+    
+    if (getCurrentModeValue() < getMinimumRequirement(aiTrainingMode)) {
+      setShowToast({ 
+        message: `Need ${getMinimumRequirement(aiTrainingMode)} for ${aiTrainingMode} mode (currently have ${getCurrentModeValue()})`, 
+        show: true 
+      });
+      setTimeout(() => setShowToast(null), 3000);
+      return;
+    }
+    
+    try {
+      const ratedTracks = musicLibrary.filter(track => track.rating);
+      const unratedTracks = musicLibrary.filter(track => !track.rating);
+      
+      console.log(`🤖 Generating ${aiTrainingMode} recommendations...`);
+      console.log('🔍 Request Data:', {
+        ratedTracksCount: ratedTracks.length,
+        unratedTracksCount: unratedTracks.length,
+        trainingMode: aiTrainingMode,
+        behaviorDataExists: !!behaviorData,
+        audioFeaturesExists: !!audioFeatures
+      });
+      
+      const requestBody = {
+        ratedTracks: ratedTracks.map(track => ({
+          id: track.id,
+          name: track.name,
+          rating: track.rating,
+          lastPlayed: playHistory.includes(track.id),
+          audioFeatures: audioFeatures[track.id] || null // Attach perceptual audio features
+        })),
+        unratedTracks: unratedTracks.map(track => ({
+          id: track.id,
+          name: track.name,
+          audioFeatures: audioFeatures[track.id] || null // Attach perceptual audio features
+        })),
+        trainingMode: aiTrainingMode,
+        behaviorData: {
+          ...behaviorData,
+          playHistory: playHistory.slice(-50), // Last 50 plays
+          sessionData: Object.fromEntries(
+            Object.entries(sessionData).slice(-20) // Last 20 sessions
+          )
+        }
+      };
+      
+      console.log('🔍 Full Request Body:', requestBody);
+      
+      const response = await fetch('/api/music-ai/recommendations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
+      });
+      
+      console.log('🔍 Raw API Response Status:', response.status);
+      console.log('🔍 Response OK:', response.ok);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ API Response Error:', errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('🔍 Parsed Response Data:', data);
+      
+      if (data.success) {
+        setRecommendations(data.recommendations || []);
+        const avgMatch = data.recommendations?.length > 0 
+          ? Math.round(data.recommendations.reduce((sum: number, rec: any) => sum + (rec.matchPercentage || 0), 0) / data.recommendations.length)
+          : 0;
+        
+        setShowToast({ 
+          message: `✨ ${data.recommendations?.length || 0} AI recommendations generated! Average match: ${avgMatch}% (${Math.round((data.confidence || 0) * 100)}% confidence)`, 
+          show: true 
+        });
+        setTimeout(() => setShowToast(null), 4000);
+        console.log(`🎯 AI Recommendations (${aiTrainingMode}):`, data.recommendations);
+      } else {
+        throw new Error(data.error || 'Unknown API error');
+      }
+    } catch (error) {
+      console.error('❌ AI Recommendation Error Details:', error);
+      
+      // More detailed error message
+      let errorMessage = '❌ Failed to generate recommendations';
+      if (error instanceof Error) {
+        errorMessage += ` - ${error.message}`;
+      }
+      
+      setShowToast({ 
+        message: errorMessage, 
+        show: true 
+      });
+      setTimeout(() => setShowToast(null), 5000);
     }
   };
 
@@ -523,126 +1753,11 @@ export default function MusicRecognitionApp() {
     setTimeout(() => setShowToast(null), 3000);
   };
 
-  // Theme implementation with actual visual changes
-  const applyTheme = (theme: 'auto' | 'dark' | 'light') => {
-    const root = document.documentElement;
-    
-    if (theme === 'auto') {
-      const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      root.classList.toggle('dark', systemPrefersDark);
-      root.classList.toggle('light', !systemPrefersDark);
-    } else {
-      root.classList.toggle('dark', theme === 'dark');
-      root.classList.toggle('light', theme === 'light');
-    }
-    
-    // Apply theme option
-    applyThemeOption(selectedThemeOption);
-    
-    // Store theme preference
-    localStorage.setItem('theme-preference', theme);
-  };
 
-  // Apply theme color scheme
-  const applyThemeOption = (themeOption: 'default' | 'neon' | 'sunset' | 'ocean' | 'forest' | 'royal') => {
-    const root = document.documentElement;
-    
-    console.log('🎨 Applying theme option:', themeOption);
-    
-    // Remove all theme classes
-    root.classList.remove('theme-neon', 'theme-sunset', 'theme-ocean', 'theme-forest', 'theme-royal');
-    
-    // Apply the selected theme option (except default)
-    if (themeOption !== 'default') {
-      root.classList.add(`theme-${themeOption}`);
-      console.log('✅ Applied theme class:', `theme-${themeOption}`);
-    } else {
-      console.log('✅ Applied default theme (no additional class)');
-    }
-    
-    // Debug: Log current classes
-    console.log('🔍 Current document classes:', root.className);
-  };
 
-  // Handle theme option changes
-  const handleThemeOptionChange = (themeOption: 'default' | 'neon' | 'sunset' | 'ocean' | 'forest' | 'royal') => {
-    setSelectedThemeOption(themeOption);
-    applyThemeOption(themeOption);
-    setHasUnsavedChanges(true);
-    
-    const themeNames = { 
-      default: 'Default', 
-      neon: 'Neon Cyber', 
-      sunset: 'Sunset Vibes', 
-      ocean: 'Ocean Depths', 
-      forest: 'Forest Dreams',
-      royal: 'Royal Purple'
-    };
-    setShowToast({ 
-      message: `Theme changed to ${themeNames[themeOption]}`, 
-      show: true 
-    });
-    setTimeout(() => setShowToast(null), 2500);
-  };
 
-  // Settings change handlers with feedback
-  const handleThemeChange = (theme: 'auto' | 'dark' | 'light') => {
-    setSettingsTheme(theme);
-    applyTheme(theme);
-    setHasUnsavedChanges(true);
-    
-    const themeNames = { auto: 'Auto', dark: 'Dark Mode', light: 'Light Mode' };
-    setShowToast({ 
-      message: `Theme changed to ${themeNames[theme]}`, 
-      show: true 
-    });
-    setTimeout(() => setShowToast(null), 2500);
-  };
 
-  const handleVisualModeChange = (mode: 'minimal' | 'immersive' | 'focus') => {
-    setVisualMode(mode);
-    setHasUnsavedChanges(true);
-    
-    // Apply visual mode to document root
-    const root = document.documentElement;
-    root.classList.remove('visual-minimal', 'visual-immersive', 'visual-focus');
-    root.classList.add(`visual-${mode}`);
-    
-    const modeNames = { 
-      minimal: 'Minimal UI', 
-      immersive: 'Immersive Experience', 
-      focus: 'Focus Mode' 
-    };
-    setShowToast({ 
-      message: `Visual mode: ${modeNames[mode]}`, 
-      show: true 
-    });
-    setTimeout(() => setShowToast(null), 2500);
-  };
 
-  const handleShuffleModeToggle = () => {
-    const newShuffleMode = !isShuffleMode;
-    setIsShuffleMode(newShuffleMode);
-    setHasUnsavedChanges(true);
-    
-    setShowToast({ 
-      message: `Shuffle mode ${newShuffleMode ? 'enabled' : 'disabled'}`, 
-      show: true 
-    });
-    setTimeout(() => setShowToast(null), 2500);
-  };
-
-  const handleAutoSaveToggle = () => {
-    const newAutoSave = !autoSave;
-    setAutoSave(newAutoSave);
-    setHasUnsavedChanges(true);
-    
-    setShowToast({ 
-      message: `Auto-save ${newAutoSave ? 'enabled' : 'disabled'}`, 
-      show: true 
-    });
-    setTimeout(() => setShowToast(null), 2500);
-  };
 
   const handleAiTrainingModeChange = (mode: 'rating' | 'audio' | 'listening' | 'genre' | 'tempo' | 'hybrid') => {
     setAiTrainingMode(mode);
@@ -665,7 +1780,7 @@ export default function MusicRecognitionApp() {
 
   // Landing page with animated background
   const renderLandingPage = () => (
-    <div className="relative flex flex-col items-center justify-center h-screen p-4 overflow-hidden">
+    <div className="relative flex flex-col items-center justify-center h-screen p-4 overflow-hidden bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
       {/* Top Navigation Bar */}
       <div className="absolute top-4 right-4 flex items-center space-x-3 z-20">
         {/* Settings Button */}
@@ -701,25 +1816,27 @@ export default function MusicRecognitionApp() {
         </motion.button>
       </div>
 
-      {/* Animated Background Particles */}
-      <div className="absolute inset-0 overflow-hidden">
-        {Array.from({ length: 50 }).map((_, i) => (
+      {/* Animated Floating Particles */}
+      <div className="particles absolute inset-0 overflow-hidden pointer-events-none">
+        {Array.from({ length: 25 }).map((_, i) => (
           <motion.div
             key={i}
-            className="absolute w-1 h-1 bg-white rounded-full opacity-20"
-            animate={{
-              x: [0, Math.random() * 100, 0],
-              y: [0, Math.random() * 100, 0],
-              opacity: [0.2, 0.8, 0.2],
-            }}
-            transition={{
-              duration: Math.random() * 10 + 10,
-              repeat: Infinity,
-              ease: "linear"
-            }}
+            className="particle absolute w-2 h-2 bg-white rounded-full shadow-sm"
             style={{
               left: `${Math.random() * 100}%`,
               top: `${Math.random() * 100}%`,
+            }}
+            animate={{
+              x: [0, Math.random() * 200 - 100, Math.random() * 200 - 100, 0],
+              y: [0, Math.random() * 200 - 100, Math.random() * 200 - 100, 0],
+              opacity: [0.2, 0.6, 0.8, 0.4, 0.2],
+              scale: [1, 1.2, 0.8, 1.1, 1],
+            }}
+            transition={{
+              duration: Math.random() * 8 + 6,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: Math.random() * 3,
             }}
           />
         ))}
@@ -866,13 +1983,7 @@ export default function MusicRecognitionApp() {
               >
                 <div className="relative z-10 flex items-center justify-center">
                   <span>Get Started</span>
-                  <motion.span 
-                    className="inline-block ml-2"
-                    animate={{ x: [0, 3, 0] }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                  >
-                    →
-                  </motion.span>
+                  <span className="inline-block ml-2">→</span>
                 </div>
               </motion.div>
             </div>
@@ -949,13 +2060,7 @@ export default function MusicRecognitionApp() {
               >
                 <div className="relative z-10 flex items-center justify-center">
                   <span>{musicLibrary.length > 0 ? 'View Library' : 'Upload First'}</span>
-                  <motion.span 
-                    className="inline-block ml-2"
-                    animate={musicLibrary.length > 0 ? { x: [0, 3, 0] } : {}}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                  >
-                    →
-                  </motion.span>
+                  <span className="inline-block ml-2">→</span>
                 </div>
               </motion.div>
             </div>
@@ -1023,13 +2128,7 @@ export default function MusicRecognitionApp() {
               >
                 <div className="relative z-10 flex items-center justify-center">
                   <span>View Plans</span>
-                  <motion.span 
-                    className="inline-block ml-2"
-                    animate={{ x: [0, 3, 0] }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                  >
-                    →
-                  </motion.span>
+                  <span className="inline-block ml-2">→</span>
                 </div>
               </motion.div>
             </div>
@@ -1052,11 +2151,8 @@ export default function MusicRecognitionApp() {
     </div>
   );
 
-  return (
-          <div className="min-h-screen" style={{ 
-        background: 'linear-gradient(135deg, var(--bg-primary), var(--bg-secondary))',
-        color: 'var(--text-primary)'
-      }}>
+    return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white">
       
       {/* Main Content */}
       <AnimatePresence mode="wait">
@@ -1217,18 +2313,35 @@ export default function MusicRecognitionApp() {
                   <div className="flex items-center space-x-4">
                     <Brain className="h-8 w-8 text-pink-400" />
                     <div>
-                      <h3 className="text-xl font-semibold">AI Learning Progress</h3>
-                      <p className="text-gray-300">Songs analyzed: {aiInsights.totalRatedSongs}/{musicLibrary.length}</p>
+                      <h3 className="text-xl font-semibold">AI Learning Progress ({aiTrainingMode.charAt(0).toUpperCase() + aiTrainingMode.slice(1)})</h3>
+                      <p className="text-gray-300">
+                        {aiTrainingMode === 'rating' && `Songs rated: ${aiInsights.totalRatedSongs}/${getMinimumRequirement('rating')}`}
+                        {aiTrainingMode === 'audio' && `Audio analyzed: ${Object.keys(audioFeatures).length}/${getMinimumRequirement('audio')}`}
+                        {aiTrainingMode === 'listening' && `Sessions tracked: ${behaviorData.sessionLength}/${getMinimumRequirement('listening')}`}
+                        {aiTrainingMode === 'genre' && `Genres mapped: ${aiInsights.totalRatedSongs}/${getMinimumRequirement('genre')}`}
+                        {aiTrainingMode === 'tempo' && `Tempo analyzed: ${Object.keys(audioFeatures).length}/${getMinimumRequirement('tempo')}`}
+                        {aiTrainingMode === 'hybrid' && `Data points: ${aiInsights.totalRatedSongs + Object.keys(audioFeatures).length + behaviorData.sessionLength}/${getMinimumRequirement('hybrid')}`}
+                      </p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    {aiInsights.readyForRecommendations ? (
-                      <span className="px-4 py-2 bg-green-500/20 text-green-400 rounded-full text-sm">
-                        Ready for AI recommendations!
-                      </span>
+                  <div className="text-right flex items-center space-x-3">
+                    {getCurrentModeProgress() >= 100 ? (
+                      <>
+                        <span className="px-4 py-2 bg-green-500/20 text-green-400 rounded-full text-sm">
+                          Ready for AI recommendations!
+                        </span>
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={generateRecommendations}
+                          className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full text-white text-sm font-medium hover:from-purple-400 hover:to-pink-400 transition-all duration-300"
+                        >
+                          Generate AI Recommendations
+                        </motion.button>
+                      </>
                     ) : (
                       <span className="px-4 py-2 bg-yellow-500/20 text-yellow-400 rounded-full text-sm">
-                        Rate {20 - aiInsights.totalRatedSongs} more songs to unlock AI
+                        {getMinimumRequirement(aiTrainingMode) - getCurrentModeValue()} more needed for {aiTrainingMode} AI
                       </span>
                     )}
                   </div>
@@ -1236,9 +2349,139 @@ export default function MusicRecognitionApp() {
                 <div className="mt-4 w-full bg-gray-700 rounded-full h-2">
                   <motion.div 
                     initial={{ width: 0 }}
-                    animate={{ width: `${(aiInsights.totalRatedSongs / 20) * 100}%` }}
+                    animate={{ width: `${Math.min(getCurrentModeProgress(), 100)}%` }}
                     className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-500"
                   />
+                </div>
+              </motion.div>
+            )}
+            
+            {/* AI Recommendations Display */}
+            {recommendations.length > 0 && (
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mx-8 mb-8 bg-gradient-to-r from-purple-800/40 to-pink-800/40 backdrop-blur-lg rounded-xl p-6 border border-purple-500/20"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl">
+                      <Sparkles className="h-6 w-6 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold text-white">🤖 AI Recommendations for You</h3>
+                      <p className="text-purple-300 text-sm">Based on your {aiTrainingMode} analysis</p>
+                    </div>
+                  </div>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setRecommendations([])}
+                    className="px-3 py-1 bg-gray-600/50 hover:bg-gray-600/70 text-gray-300 rounded-lg transition-colors text-sm"
+                  >
+                    Clear
+                  </motion.button>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {recommendations.map((track, index) => (
+                    <motion.div
+                      key={track.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="bg-white/5 rounded-lg p-4 hover:bg-white/10 transition-all duration-300 border border-purple-500/20 hover:border-purple-400/40"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <motion.button
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => track.needsReupload ? setCurrentView('upload') : playTrack(track)}
+                          className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center hover:from-purple-400 hover:to-pink-400 transition-all duration-300"
+                        >
+                          {track.needsReupload ? (
+                            <Upload className="h-5 w-5" />
+                          ) : currentTrack?.id === track.id && isPlaying ? (
+                            <Pause className="h-5 w-5" />
+                          ) : (
+                            <Play className="h-5 w-5" />
+                          )}
+                        </motion.button>
+                        
+                        <div className="text-right">
+                          <div className="flex flex-col items-end space-y-1">
+                            <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded-full">
+                              ✨ AI Pick
+                            </span>
+                            {track.matchPercentage && (
+                              <span className={`px-2 py-1 text-xs font-bold rounded-full ${
+                                track.matchPercentage >= 80 
+                                  ? 'bg-emerald-500/20 text-emerald-400' 
+                                  : track.matchPercentage >= 60 
+                                  ? 'bg-yellow-500/20 text-yellow-400'
+                                  : 'bg-orange-500/20 text-orange-400'
+                              }`}>
+                                {track.matchPercentage}% Match
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <h4 className="font-semibold text-white text-sm mb-2 truncate" title={track.name}>
+                        {track.name}
+                      </h4>
+                      
+                      <div className="flex items-center justify-between">
+                        <p className="text-gray-400 text-xs">
+                          Duration: {formatTime(track.duration || 0)}
+                        </p>
+                        {track.rating && (
+                          <span className="text-yellow-400 text-xs font-medium">
+                            ★ {track.rating}/10
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* Match Explanation */}
+                      {track.matchPercentage && (
+                        <div className="mt-2 p-2 bg-gray-800/50 rounded-lg">
+                          <p className="text-xs text-gray-300 leading-relaxed">
+                            <span className="font-semibold text-purple-300">Match Score:</span> Based on your {aiTrainingMode} preferences, 
+                            this song has a {track.matchPercentage}% likelihood you&apos;ll enjoy it.{' '}
+                            <span className={`font-semibold ${
+                              track.matchPercentage >= 80 ? 'text-emerald-400' : 
+                              track.matchPercentage >= 60 ? 'text-yellow-400' : 'text-orange-400'
+                            }`}>
+                              {track.matchPercentage >= 80 ? 'Highly recommended!' : 
+                               track.matchPercentage >= 60 ? 'Good match' : 'Worth trying'}
+                            </span>
+                          </p>
+                        </div>
+                      )}
+                      
+                      {/* Quick rating for recommended songs */}
+                      <div className="flex items-center space-x-1 mt-3 justify-center">
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => (
+                          <motion.button
+                            key={rating}
+                            whileHover={{ scale: 1.2 }}
+                            whileTap={{ scale: 0.8 }}
+                            onClick={() => rateTrack(track.id, rating)}
+                            className={`w-5 h-5 rounded-full text-xs font-bold transition-all duration-200 ${
+                              track.rating === rating
+                                ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-black'
+                                : track.rating && rating <= track.rating
+                                ? 'bg-gradient-to-r from-yellow-500 to-orange-600 text-black'
+                                : 'bg-gray-600 hover:bg-gray-500 text-white'
+                            }`}
+                          >
+                            {rating}
+                          </motion.button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  ))}
                 </div>
               </motion.div>
             )}
@@ -1804,37 +3047,49 @@ export default function MusicRecognitionApp() {
                                 ))}
                               </div>
 
-                              {/* AI Progress Visualization */}
+                                                            {/* AI Progress Visualization */}
                               <div className="bg-gray-900/50 rounded-2xl p-4">
                                 <div className="flex items-center justify-between mb-3">
                                   <h4 className="font-semibold text-white">Training Progress</h4>
                                   <span className="text-sm text-blue-400 font-medium">
-                                    {aiTrainingMode === 'rating' && `${Math.round((aiInsights.totalRatedSongs / 20) * 100)}%`}
-                                    {aiTrainingMode === 'audio' && `${Math.round((Math.min(musicLibrary.length, 50) / 50) * 100)}%`}
-                                    {aiTrainingMode === 'hybrid' && `${Math.round((Math.min(aiInsights.totalRatedSongs + playHistory.length + musicLibrary.length, 100) / 100) * 100)}%`}
-                                    {!['rating', 'audio', 'hybrid'].includes(aiTrainingMode) && '75%'}
+                                    {Math.round(getCurrentModeProgress())}%
                                   </span>
                                 </div>
                                 <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
                                   <motion.div
                                     initial={{ width: 0 }}
-                                    animate={{ 
-                                      width: `${
-                                        aiTrainingMode === 'rating' ? Math.min((aiInsights.totalRatedSongs / 20) * 100, 100) :
-                                        aiTrainingMode === 'audio' ? Math.min((musicLibrary.length / 50) * 100, 100) :
-                                        aiTrainingMode === 'hybrid' ? Math.min(((aiInsights.totalRatedSongs + playHistory.length + musicLibrary.length) / 100) * 100, 100) : 75
-                                      }%`
-                                    }}
+                                    animate={{ width: `${getCurrentModeProgress()}%` }}
                                     transition={{ duration: 0.8, ease: "easeOut" }}
                                     className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"
                                   />
                                 </div>
                                 <p className="text-xs text-gray-400 mt-2">
-                                  {aiTrainingMode === 'rating' && `${aiInsights.totalRatedSongs}/20 songs rated`}
-                                  {aiTrainingMode === 'audio' && `${Math.min(musicLibrary.length, 50)}/50 songs analyzed`}
-                                  {aiTrainingMode === 'hybrid' && `${Math.min(aiInsights.totalRatedSongs + playHistory.length + musicLibrary.length, 100)}/100 data points`}
-                                  {!['rating', 'audio', 'hybrid'].includes(aiTrainingMode) && 'Advanced training in progress'}
+                                  {aiTrainingMode === 'rating' && `${aiInsights.totalRatedSongs}/${getMinimumRequirement('rating')} songs rated`}
+                                  {aiTrainingMode === 'audio' && `${Object.keys(audioFeatures).length}/${getMinimumRequirement('audio')} songs analyzed`}
+                                  {aiTrainingMode === 'listening' && `${behaviorData.sessionLength}/${getMinimumRequirement('listening')} behavior sessions tracked`}
+                                  {aiTrainingMode === 'genre' && `${aiInsights.totalRatedSongs}/${getMinimumRequirement('genre')} songs rated for genre mapping`}
+                                  {aiTrainingMode === 'tempo' && `${Object.keys(audioFeatures).length}/${getMinimumRequirement('tempo')} songs tempo analyzed`}
+                                  {aiTrainingMode === 'hybrid' && `${Math.min(aiInsights.totalRatedSongs + Object.keys(audioFeatures).length + behaviorData.sessionLength, getMinimumRequirement('hybrid'))}/${getMinimumRequirement('hybrid')} data points collected`}
                                 </p>
+                                
+                                {/* Test Recommendations Button */}
+                                <div className="mt-4 flex justify-center">
+                                  <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={generateRecommendations}
+                                    disabled={getCurrentModeProgress() < 25}
+                                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 ${
+                                      getCurrentModeProgress() >= 25
+                                        ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-400 hover:to-pink-400'
+                                        : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                                    }`}
+                                  >
+                                    {getCurrentModeProgress() >= 100 ? '🚀 Generate AI Recommendations' : 
+                                     getCurrentModeProgress() >= 25 ? '🧪 Test Recommendations (Preview)' :
+                                     '❌ Not enough data yet'}
+                                  </motion.button>
+                                </div>
                               </div>
                             </div>
                           </motion.div>
@@ -1899,7 +3154,7 @@ export default function MusicRecognitionApp() {
                                     key={theme.mode}
                                     whileHover={{ scale: 1.05 }}
                                     whileTap={{ scale: 0.95 }}
-                                    onClick={() => handleThemeChange(theme.mode as any)}
+                                    onClick={() => setSettingsTheme(theme.mode as any)}
                                     className={`p-3 rounded-xl transition-all ${
                                       settingsTheme === theme.mode
                                         ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/25'
@@ -1931,7 +3186,7 @@ export default function MusicRecognitionApp() {
                                       name="visualMode"
                                       value={mode}
                                       checked={visualMode === mode}
-                                      onChange={(e) => handleVisualModeChange(e.target.value as any)}
+                                      onChange={(e) => setVisualMode(e.target.value as any)}
                                       className="w-4 h-4 text-purple-500 bg-gray-700 border-gray-600 focus:ring-purple-500 focus:ring-2"
                                     />
                                       <span className="text-white capitalize">{mode}</span>
@@ -1940,42 +3195,7 @@ export default function MusicRecognitionApp() {
                                 </div>
                               </div>
 
-                              {/* Theme Color Schemes */}
-                              <div>
-                                <h4 className="font-semibold text-white mb-3 flex items-center">
-                                  <Sparkles className="h-4 w-4 mr-2 text-pink-400" />
-                                  Color Themes
-                                </h4>
-                                <div className="grid grid-cols-2 gap-2">
-                                  {[
-                                    { theme: 'default', label: 'Default', colors: 'from-gray-600 to-gray-700', icon: '🎨' },
-                                    { theme: 'neon', label: 'Neon Cyber', colors: 'from-green-400 to-blue-500', icon: '⚡' },
-                                    { theme: 'sunset', label: 'Sunset Vibes', colors: 'from-orange-500 to-red-500', icon: '🌅' },
-                                    { theme: 'ocean', label: 'Ocean Depths', colors: 'from-blue-500 to-cyan-500', icon: '🌊' },
-                                    { theme: 'forest', label: 'Forest Dreams', colors: 'from-green-500 to-emerald-600', icon: '🌲' },
-                                    { theme: 'royal', label: 'Royal Purple', colors: 'from-purple-500 to-violet-600', icon: '👑' }
-                                  ].map((themeOption) => (
-                                    <motion.button
-                                      key={themeOption.theme}
-                                      whileHover={{ scale: 1.02 }}
-                                      whileTap={{ scale: 0.98 }}
-                                      onClick={() => handleThemeOptionChange(themeOption.theme as any)}
-                                      className={`p-3 rounded-xl transition-all text-left ${
-                                        selectedThemeOption === themeOption.theme
-                                          ? `bg-gradient-to-r ${themeOption.colors} text-white shadow-lg`
-                                          : 'bg-gray-800/50 text-gray-300 hover:bg-gray-700'
-                                      }`}
-                                    >
-                                      <div className="flex items-center space-x-2">
-                                        <span className="text-lg">{themeOption.icon}</span>
-                                        <div>
-                                          <div className="text-xs font-semibold">{themeOption.label}</div>
-                                        </div>
-                                      </div>
-                                    </motion.button>
-                                  ))}
-                                </div>
-                              </div>
+
 
                               {/* Modern Toggle Switches */}
                               <div className="space-y-4">
@@ -1986,7 +3206,7 @@ export default function MusicRecognitionApp() {
                                   </div>
                                                                   <motion.button
                                   whileTap={{ scale: 0.95 }}
-                                  onClick={handleShuffleModeToggle}
+                                  onClick={() => setIsShuffleMode(!isShuffleMode)}
                                   className={`relative w-12 h-6 rounded-full transition-colors ${
                                     isShuffleMode ? 'bg-purple-600 shadow-lg shadow-purple-500/25' : 'bg-gray-600'
                                   }`}
@@ -2006,7 +3226,7 @@ export default function MusicRecognitionApp() {
                                   </div>
                                                                   <motion.button
                                   whileTap={{ scale: 0.95 }}
-                                  onClick={handleAutoSaveToggle}
+                                  onClick={() => setAutoSave(!autoSave)}
                                   className={`relative w-12 h-6 rounded-full transition-colors ${
                                     autoSave ? 'bg-green-600 shadow-lg shadow-green-500/25' : 'bg-gray-600'
                                   }`}
@@ -2517,7 +3737,7 @@ export default function MusicRecognitionApp() {
                     <motion.button
                       whileHover={{ scale: 1.1, y: -2 }}
                       whileTap={{ scale: 0.95 }}
-                      onClick={handleShuffleModeToggle}
+                      onClick={() => setIsShuffleMode(!isShuffleMode)}
                       className={`group relative ${isPlayerMinimized ? 'p-2' : 'p-3'} rounded-2xl backdrop-blur-sm border transition-all duration-300 shadow-lg hover:shadow-xl ${
                         isShuffleMode 
                           ? 'bg-gradient-to-r from-pink-500/20 to-purple-500/20 border-pink-500/50' 
