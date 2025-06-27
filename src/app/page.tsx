@@ -57,6 +57,7 @@ export default function MusicRecognitionApp() {
   const [playHistory, setPlayHistory] = useState<string[]>([]);
   const [showToast, setShowToast] = useState<{ message: string; show: boolean } | null>(null);
   const [isPlayerMinimized, setIsPlayerMinimized] = useState(false);
+  const [libraryViewMode, setLibraryViewMode] = useState<'list' | 'grid'>('list');
 
   // Refs
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -908,6 +909,19 @@ export default function MusicRecognitionApp() {
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
+                  onClick={() => setLibraryViewMode(libraryViewMode === 'list' ? 'grid' : 'list')}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-full transition-all duration-300 ${
+                    libraryViewMode === 'grid' 
+                      ? 'bg-gradient-to-r from-blue-500/20 to-indigo-500/20 border border-blue-500/30 text-blue-300' 
+                      : 'bg-gradient-to-r from-gray-600/20 to-gray-700/20 border border-gray-600/30 text-gray-300'
+                  }`}
+                >
+                  <Monitor className="h-4 w-4" />
+                  <span>{libraryViewMode === 'grid' ? 'Grid View' : 'List View'}</span>
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={() => setIsShuffleMode(!isShuffleMode)}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-full transition-all duration-300 ${
                     isShuffleMode 
@@ -974,62 +988,126 @@ export default function MusicRecognitionApp() {
               </motion.div>
             )}
             
-            {/* Music List */}
-            <div className="max-w-4xl mx-auto space-y-4">
+            {/* Music Display */}
+            <div className="max-w-6xl mx-auto">
               <AnimatePresence>
-                {musicLibrary.map((track, index) => (
-                  <motion.div
-                    key={track.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ delay: index * 0.1 }}
-                    className="group flex items-center justify-between p-4 bg-white/5 rounded-lg hover:bg-white/10 transition-all duration-300 border border-transparent hover:border-purple-500/30"
-                  >
-                    <div className="flex items-center space-x-4">
-                      <motion.button
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => playTrack(track)}
-                        className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 ${
-                          currentTrack?.id === track.id && isPlaying
-                            ? 'bg-gradient-to-r from-pink-500 to-purple-500'
-                            : 'bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-400 hover:to-blue-400'
+                {libraryViewMode === 'list' ? (
+                  <div className="space-y-4">
+                    {musicLibrary.map((track, index) => (
+                      <motion.div
+                        key={track.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ delay: index * 0.1 }}
+                        className="group flex items-center justify-between p-4 bg-white/5 rounded-lg hover:bg-white/10 transition-all duration-300 border border-transparent hover:border-purple-500/30"
+                      >
+                        <div className="flex items-center space-x-4">
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => playTrack(track)}
+                            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 ${
+                              currentTrack?.id === track.id && isPlaying
+                                ? 'bg-gradient-to-r from-pink-500 to-purple-500'
+                                : 'bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-400 hover:to-blue-400'
+                            }`}
+                          >
+                            {currentTrack?.id === track.id && isPlaying ? (
+                              <Pause className="h-6 w-6" />
+                            ) : (
+                              <Play className="h-6 w-6" />
+                            )}
+                          </motion.button>
+                          <div>
+                            <h3 className="font-semibold text-lg group-hover:text-purple-300 transition-colors">{track.name}</h3>
+                            <p className="text-gray-400 text-sm">
+                              Duration: {formatTime(track.duration || 0)}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <motion.button
+                              key={star}
+                              whileHover={{ scale: 1.2 }}
+                              whileTap={{ scale: 0.8 }}
+                              onClick={() => rateTrack(track.id, star)}
+                              className={`transition-all duration-200 ${
+                                (track.rating || 0) >= star ? 'text-yellow-400' : 'text-gray-600 hover:text-gray-400'
+                              }`}
+                            >
+                              <Star className="h-5 w-5" fill={
+                                (track.rating || 0) >= star ? 'currentColor' : 'none'
+                              } />
+                            </motion.button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {musicLibrary.map((track, index) => (
+                      <motion.div
+                        key={track.id}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        transition={{ delay: index * 0.1 }}
+                        whileHover={{ scale: 1.02, y: -5 }}
+                        className={`group bg-gradient-to-br from-gray-800/60 to-gray-900/60 backdrop-blur-lg rounded-xl p-6 border transition-all duration-300 ${
+                          currentTrack?.id === track.id 
+                            ? 'border-pink-500 shadow-lg shadow-pink-500/20' 
+                            : 'border-gray-700 hover:border-purple-500'
                         }`}
                       >
-                        {currentTrack?.id === track.id && isPlaying ? (
-                          <Pause className="h-6 w-6" />
-                        ) : (
-                          <Play className="h-6 w-6" />
-                        )}
-                      </motion.button>
-                      <div>
-                        <h3 className="font-semibold text-lg group-hover:text-purple-300 transition-colors">{track.name}</h3>
-                        <p className="text-gray-400 text-sm">
+                        <div className="flex items-center justify-between mb-4">
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => playTrack(track)}
+                            className={`w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300 ${
+                              currentTrack?.id === track.id && isPlaying
+                                ? 'bg-gradient-to-r from-pink-500 to-purple-500'
+                                : 'bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-400 hover:to-blue-400'
+                            }`}
+                          >
+                            {currentTrack?.id === track.id && isPlaying ? (
+                              <Pause className="h-7 w-7" />
+                            ) : (
+                              <Play className="h-7 w-7" />
+                            )}
+                          </motion.button>
+                        </div>
+                        
+                        <h3 className="font-semibold text-lg mb-2 group-hover:text-purple-300 transition-colors truncate">{track.name}</h3>
+                        <p className="text-gray-400 text-sm mb-4">
                           Duration: {formatTime(track.duration || 0)}
                         </p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <motion.button
-                          key={star}
-                          whileHover={{ scale: 1.2 }}
-                          whileTap={{ scale: 0.8 }}
-                          onClick={() => rateTrack(track.id, star)}
-                          className={`transition-all duration-200 ${
-                            (track.rating || 0) >= star ? 'text-yellow-400' : 'text-gray-600 hover:text-gray-400'
-                          }`}
-                        >
-                          <Star className="h-5 w-5" fill={
-                            (track.rating || 0) >= star ? 'currentColor' : 'none'
-                          } />
-                        </motion.button>
-                      ))}
-                    </div>
-                  </motion.div>
-                ))}
+                        
+                        <div className="flex items-center justify-center space-x-1">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <motion.button
+                              key={star}
+                              whileHover={{ scale: 1.2 }}
+                              whileTap={{ scale: 0.8 }}
+                              onClick={() => rateTrack(track.id, star)}
+                              className={`transition-all duration-200 ${
+                                (track.rating || 0) >= star ? 'text-yellow-400' : 'text-gray-600 hover:text-gray-400'
+                              }`}
+                            >
+                              <Star className="h-4 w-4" fill={
+                                (track.rating || 0) >= star ? 'currentColor' : 'none'
+                              } />
+                            </motion.button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
               </AnimatePresence>
               
               {musicLibrary.length === 0 && (
