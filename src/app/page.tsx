@@ -165,12 +165,18 @@ export default function MusicRecognitionApp() {
     }
   }, []);
 
-  // Apply theme after settings are loaded
+  // Apply theme and visual mode after settings are loaded
   useEffect(() => {
     console.log('⚙️ Settings theme changed, applying:', settingsTheme);
     applyTheme(settingsTheme);
     applyThemeOption(selectedThemeOption);
-  }, [settingsTheme, selectedThemeOption]);
+    
+    // Apply visual mode
+    const root = document.documentElement;
+    root.classList.remove('visual-minimal', 'visual-immersive', 'visual-focus');
+    root.classList.add(`visual-${visualMode}`);
+    console.log('🎯 Applied visual mode:', visualMode);
+  }, [settingsTheme, selectedThemeOption, visualMode]);
 
   // Effect to update AI insights
   useEffect(() => {
@@ -596,6 +602,11 @@ export default function MusicRecognitionApp() {
   const handleVisualModeChange = (mode: 'minimal' | 'immersive' | 'focus') => {
     setVisualMode(mode);
     setHasUnsavedChanges(true);
+    
+    // Apply visual mode to document root
+    const root = document.documentElement;
+    root.classList.remove('visual-minimal', 'visual-immersive', 'visual-focus');
+    root.classList.add(`visual-${mode}`);
     
     const modeNames = { 
       minimal: 'Minimal UI', 

@@ -368,6 +368,42 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+/* Visual Mode System */
+.visual-minimal {
+  --visual-padding: 8px;
+  --visual-border-radius: 8px;
+  --visual-shadow: none;
+}
+
+.visual-immersive {
+  --visual-padding: 24px;
+  --visual-border-radius: 24px;
+  --visual-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.visual-focus {
+  --visual-padding: 12px;
+  --visual-border-radius: 12px;
+  --visual-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* Apply visual mode styles to cards and components */
+.visual-minimal .rounded-3xl {
+  border-radius: 12px !important;
+}
+
+.visual-minimal [class*="p-6"], .visual-minimal [class*="p-8"] {
+  padding: 16px !important;
+}
+
+.visual-focus .rounded-3xl {
+  border-radius: 16px !important;
+}
+
+.visual-focus [class*="shadow"] {
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2) !important;
+}
+
 /* Dark mode optimizations */
 @media (prefers-color-scheme: dark) {
   .glass-effect {
