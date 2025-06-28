@@ -3721,9 +3721,9 @@ export default function MusicRecognitionApp() {
                     {/* Album Art Placeholder */}
                     <motion.div 
                       className={`${isPlayerMinimized ? 'w-12 h-12' : 'w-16 h-16'} bg-gradient-to-br from-pink-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-xl relative overflow-hidden transition-all duration-300`}
-                      animate={{ rotate: isPlaying ? 360 : 0 }}
+                      animate={{ rotate: isPlaying ? [0, 360] : 0 }}
                       transition={{ 
-                        duration: 30, 
+                        duration: 20, 
                         repeat: isPlaying ? Infinity : 0, 
                         ease: "linear",
                         repeatType: "loop"
@@ -3733,8 +3733,8 @@ export default function MusicRecognitionApp() {
                       {isPlaying && (
                         <motion.div 
                           className="absolute inset-0 bg-white/10"
-                          animate={{ opacity: [0.5, 0.8, 0.5] }}
-                          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                          animate={{ opacity: [0.5, 0.7, 0.5] }}
+                          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
                         />
                       )}
                     </motion.div>
@@ -3767,12 +3767,12 @@ export default function MusicRecognitionApp() {
                                   key={i}
                                   className="w-1 bg-gradient-to-t from-pink-500 to-purple-400 rounded-full"
                                   animate={{
-                                    height: [4, 12, 8, 16, 6],
+                                    height: [6, 10, 8, 12, 7],
                                   }}
                                   transition={{
-                                    duration: 1.2,
+                                    duration: 1.8,
                                     repeat: Infinity,
-                                    delay: i * 0.1,
+                                    delay: i * 0.2,
                                     ease: "easeInOut"
                                   }}
                                 />
@@ -3834,15 +3834,15 @@ export default function MusicRecognitionApp() {
                         </AnimatePresence>
                       </div>
                       
-                      {/* Ripple effect */}
+                      {/* Ripple effect - Simplified */}
                       <motion.div
-                        className="absolute inset-0 rounded-3xl border-2 border-white/30"
+                        className="absolute inset-0 rounded-3xl border-2 border-white/20"
                         animate={{
-                          scale: isPlaying ? [1, 1.2, 1] : 1,
-                          opacity: isPlaying ? [0.7, 0, 0.7] : 0.7,
+                          scale: isPlaying ? [1, 1.1, 1] : 1,
+                          opacity: isPlaying ? [0.3, 0.1, 0.3] : 0.3,
                         }}
                         transition={{
-                          duration: 2,
+                          duration: 3,
                           repeat: isPlaying ? Infinity : 0,
                           ease: "easeInOut"
                         }}
@@ -3894,9 +3894,9 @@ export default function MusicRecognitionApp() {
                       }`} />
                       {isShuffleMode && (
                         <motion.div
-                          className="absolute inset-0 rounded-2xl bg-gradient-to-r from-pink-500/30 to-purple-500/30"
-                          animate={{ opacity: [0.3, 0.6, 0.3] }}
-                          transition={{ duration: 2, repeat: Infinity }}
+                          className="absolute inset-0 rounded-2xl bg-gradient-to-r from-pink-500/20 to-purple-500/20"
+                          animate={{ opacity: [0.2, 0.4, 0.2] }}
+                          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
                         />
                       )}
                     </motion.button>
@@ -4991,9 +4991,10 @@ export default function MusicRecognitionApp() {
       {isPlaying && (
         <motion.div
           drag="y"
-          dragConstraints={{ top: -400, bottom: -12 }} // Can move almost full screen height with 50px margins
-          dragElastic={0.1}
+          dragConstraints={{ top: -200, bottom: -40 }} // More conservative drag range
+          dragElastic={0.05}
           dragMomentum={false}
+          dragTransition={{ bounceStiffness: 100, bounceDamping: 15 }}
           whileDrag={{ boxShadow: "0 10px 30px rgba(0,0,0,0.3)" }}
           className="fixed right-4 bg-black/80 backdrop-blur-sm text-white p-3 rounded-lg text-xs z-50 cursor-grab active:cursor-grabbing select-none"
           style={{ bottom: 16 }}
