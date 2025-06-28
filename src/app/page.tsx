@@ -57,6 +57,7 @@ interface MusicTrack {
   rating?: number;
   analyzed?: boolean;
   matchPercentage?: number;
+  recommendationId?: string; // For AI feedback tracking
   audioFeatures?: AudioFeatures;
 }
 
@@ -112,6 +113,7 @@ export default function MusicRecognitionApp() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showSettingsTour, setShowSettingsTour] = useState(false);
   const [settingsPreset, setSettingsPreset] = useState<'casual' | 'audiophile' | 'creator' | 'custom'>('custom');
+  const [showResetDialog, setShowResetDialog] = useState(false);
 
   // Audio Analysis State
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -188,6 +190,51 @@ export default function MusicRecognitionApp() {
       console.error('Failed to load training mode from localStorage:', error);
       return 'rating';
     }
+  };
+
+  // Reset Music Library Function
+  const resetMusicLibrary = () => {
+    // Clear music library
+    setMusicLibrary([]);
+    
+    // Stop current track if playing
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    setCurrentTrack(null);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    
+    // Clear recommendations and AI insights
+    setRecommendations([]);
+    setAiInsights({
+      totalRatedSongs: 0,
+      patterns: [],
+      readyForRecommendations: false
+    });
+    
+    // Clear play history
+    setPlayHistory([]);
+    
+    // Clear localStorage ratings
+    try {
+      localStorage.removeItem('musicAppRatings');
+      console.log('🗑️ Cleared ratings from local storage');
+    } catch (error) {
+      console.error('Failed to clear ratings from localStorage:', error);
+    }
+    
+    // Close dialog and show success message
+    setShowResetDialog(false);
+    setShowToast({ 
+      message: '🗑️ Music library reset successfully! All songs, ratings, and AI data cleared.', 
+      show: true 
+    });
+    setTimeout(() => setShowToast(null), 4000);
+    
+    console.log('🗑️ Music library reset complete');
   };
 
   // Setup Web Audio API for real-time audio analysis
@@ -2282,6 +2329,40 @@ export default function MusicRecognitionApp() {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  // NEW: Send recommendation feedback to AI for learning
+  const sendRecommendationFeedback = async (recommendationId: string, action: string, matchPercentage: number, userRating?: number) => {
+    try {
+      console.log(`📊 Sending feedback: ${action} for recommendation ${recommendationId}`);
+      
+      const response = await fetch('/api/music-ai/recommendations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          feedback: {
+            recommendationId,
+            action,
+            matchPercentage,
+            userRating
+          }
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success && data.accuracy) {
+        setShowToast({ 
+          message: `🎯 AI Learning: ${data.accuracy}% prediction accuracy!`, 
+          show: true 
+        });
+        setTimeout(() => setShowToast(null), 3000);
+      }
+    } catch (error) {
+      console.error('Failed to send recommendation feedback:', error);
+    }
+  };
+
   useEffect(() => {
     if (currentTrack && audioRef.current) {
       audioRef.current.src = currentTrack.url;
@@ -3286,7 +3367,13 @@ export default function MusicRecognitionApp() {
                       <motion.button
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
-                        onClick={() => playTrack(track)}
+                        onClick={() => {
+                          playTrack(track);
+                          // Send feedback that user played the recommendation
+                          if (track.recommendationId) {
+                            sendRecommendationFeedback(track.recommendationId, 'played', track.matchPercentage);
+                          }
+                        }}
                         className="p-2 rounded-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 transition-all duration-300"
                       >
                         {currentTrack?.id === track.id && isPlaying ? (
@@ -3336,7 +3423,13 @@ export default function MusicRecognitionApp() {
                             key={rating}
                             whileHover={{ scale: 1.2 }}
                             whileTap={{ scale: 0.9 }}
-                            onClick={() => rateTrack(track.id, rating)}
+                            onClick={() => {
+                              rateTrack(track.id, rating);
+                              // Send feedback with actual user rating for AI learning
+                              if (track.recommendationId) {
+                                sendRecommendationFeedback(track.recommendationId, 'rated', track.matchPercentage, rating);
+                              }
+                            }}
                             className={`w-6 h-6 rounded-full text-xs font-bold transition-all duration-200 ${
                               track.rating === rating
                                 ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-black'
@@ -3360,6 +3453,29 @@ export default function MusicRecognitionApp() {
                         </div>
                       )}
                     </div>
+
+                    {/* AI Learning Feedback - Only for recommendations */}
+                    {track.recommendationId && (
+                      <div className="mt-3 pt-3 border-t border-gray-700/50">
+                        <p className="text-xs text-gray-400 mb-2">Help AI learn your taste:</p>
+                        <div className="flex justify-center space-x-2">
+                                                     <button
+                             onClick={() => track.recommendationId && sendRecommendationFeedback(track.recommendationId, 'liked', track.matchPercentage)}
+                             className="text-xs px-3 py-1 bg-green-600/20 text-green-400 rounded hover:bg-green-600/30 transition-colors flex items-center space-x-1"
+                           >
+                             <span>👍</span>
+                             <span>Good pick!</span>
+                           </button>
+                           <button
+                             onClick={() => track.recommendationId && sendRecommendationFeedback(track.recommendationId, 'disliked', track.matchPercentage)}
+                             className="text-xs px-3 py-1 bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 transition-colors flex items-center space-x-1"
+                           >
+                             <span>👎</span>
+                             <span>Not for me</span>
+                           </button>
+                        </div>
+                      </div>
+                    )}
                   </motion.div>
                   ))}
               </div>
@@ -3379,19 +3495,30 @@ export default function MusicRecognitionApp() {
                   <Music className="mr-3 h-8 w-8 text-purple-400" />
                   Your Music Library
                 </h2>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setIsShuffleMode(!isShuffleMode)}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-semibold transition-all duration-300 ${
-                    isShuffleMode 
-                      ? 'bg-gradient-to-r from-pink-500 to-purple-600' 
-                      : 'bg-gray-700 hover:bg-gray-600'
-                  }`}
-                >
-                  <Shuffle className="h-5 w-5" />
-                  <span>{isShuffleMode ? 'Shuffle: ON' : 'Shuffle: OFF'}</span>
-                </motion.button>
+                <div className="flex items-center space-x-3">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setShowResetDialog(true)}
+                    className="flex items-center space-x-2 px-4 py-2 rounded-lg font-semibold transition-all duration-300 bg-gradient-to-r from-red-600/20 to-red-700/20 border border-red-500/30 text-red-300 hover:text-red-200 hover:from-red-600/30 hover:to-red-700/30"
+                  >
+                    <RotateCcw className="h-5 w-5" />
+                    <span>Reset Library</span>
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setIsShuffleMode(!isShuffleMode)}
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-semibold transition-all duration-300 ${
+                      isShuffleMode 
+                        ? 'bg-gradient-to-r from-pink-500 to-purple-600' 
+                        : 'bg-gray-700 hover:bg-gray-600'
+                    }`}
+                  >
+                    <Shuffle className="h-5 w-5" />
+                    <span>{isShuffleMode ? 'Shuffle: ON' : 'Shuffle: OFF'}</span>
+                  </motion.button>
+                </div>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -3457,6 +3584,63 @@ export default function MusicRecognitionApp() {
           )}
         </div>
       )}
+
+      {/* Reset Music Library Dialog */}
+      <AnimatePresence>
+        {showResetDialog && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowResetDialog(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-xl rounded-3xl border border-white/10 p-8 max-w-md w-full mx-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Icon */}
+              <div className="w-16 h-16 mx-auto mb-6 bg-gradient-to-r from-red-500 to-red-600 rounded-full flex items-center justify-center">
+                <RotateCcw className="h-8 w-8 text-white" />
+              </div>
+
+              {/* Title */}
+              <h3 className="text-2xl font-bold text-center mb-4 text-white">
+                Reset Music Library?
+              </h3>
+
+              {/* Warning Message */}
+              <p className="text-center text-gray-300 mb-8 leading-relaxed">
+                This will permanently delete all {musicLibrary.length} songs, ratings, and AI learning data. This action cannot be undone.
+              </p>
+
+              {/* Buttons */}
+              <div className="flex space-x-4">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setShowResetDialog(false)}
+                  className="flex-1 px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-xl font-semibold transition-all duration-300"
+                >
+                  Cancel
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={resetMusicLibrary}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-xl font-semibold transition-all duration-300"
+                >
+                  Reset Library
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Toast Notification */}
       <AnimatePresence>

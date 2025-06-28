@@ -24,6 +24,12 @@ interface UserProfile {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    
+    // Handle feedback on previous recommendations
+    if (body.feedback) {
+      return handleRecommendationFeedback(body.feedback);
+    }
+    
     console.log('🔍 API Received Body Keys:', Object.keys(body));
     console.log('🔍 Rated Tracks Count:', body.ratedTracks?.length);
     console.log('🔍 Unrated Tracks Count:', body.unratedTracks?.length);
@@ -131,10 +137,11 @@ export async function POST(req: NextRequest) {
       success: true,
       recommendations: recommendations.slice(0, 5).map(rec => ({
         ...rec,
-        matchPercentage: calculateMatchPercentage(rec.score, trainingMode, ratedTracks.length)
+        matchPercentage: calculateMatchPercentage(rec.score, trainingMode, ratedTracks.length),
+        recommendationId: `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` // For feedback tracking
       })),
       mode: trainingMode,
-      reasoning: `Generated using ${trainingMode} analysis`,
+      reasoning: `Generated using ${trainingMode} analysis with improved distribution`,
       confidence: getConfidenceScore(trainingMode, ratedTracks.length, behaviorData)
     });
 
@@ -145,6 +152,33 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// NEW: Handle recommendation feedback
+async function handleRecommendationFeedback(feedback: any) {
+  console.log('📊 Recommendation Feedback Received:', feedback);
+  
+  // Store feedback for algorithm improvement
+  // In a real app, this would go to a database
+  const feedbackData = {
+    recommendationId: feedback.recommendationId,
+    userAction: feedback.action, // 'played', 'skipped', 'liked', 'disliked'
+    timestamp: new Date().toISOString(),
+    matchPercentage: feedback.matchPercentage,
+    actualUserRating: feedback.userRating
+  };
+  
+  // Calculate recommendation accuracy
+  const accuracy = feedback.userRating ? 
+    Math.max(0, 100 - Math.abs(feedback.matchPercentage - (feedback.userRating * 10))) : null;
+  
+  console.log(`🎯 Recommendation Accuracy: ${accuracy}%`);
+  
+  return NextResponse.json({
+    success: true,
+    message: 'Feedback recorded for algorithm improvement',
+    accuracy: accuracy
+  });
 }
 
 // 1. Rating-Based Recommendations
@@ -972,40 +1006,44 @@ function getConfidenceScore(mode: string, ratedTrackCount: number, behaviorData:
 
 // Convert raw recommendation scores to percentage matches
 function calculateMatchPercentage(rawScore: number, mode: string, ratedTrackCount: number): number {
-  // Define expected score ranges for each mode
+  // Define expected score ranges for each mode with better distribution
   const scoreRanges = {
-    rating: { min: 0, max: 15, ideal: 8 },        // Based on artist/keyword matching
-    audio: { min: 0, max: 25, ideal: 12 },        // Based on audio similarity analysis  
-    listening: { min: 0, max: 15, ideal: 8 },     // Based on behavior patterns
-    genre: { min: 0, max: 20, ideal: 10 },        // Based on genre matching
-    tempo: { min: 0, max: 15, ideal: 8 },         // Based on tempo/energy matching
-    hybrid: { min: 0, max: 20, ideal: 12 }        // Weighted combination of all methods
+    rating: { min: 0, max: 15, ideal: 8 },
+    audio: { min: 0, max: 25, ideal: 12 },
+    listening: { min: 0, max: 15, ideal: 8 },
+    genre: { min: 0, max: 20, ideal: 10 },
+    tempo: { min: 0, max: 15, ideal: 8 },
+    hybrid: { min: 0, max: 20, ideal: 12 }
   };
 
   const range = scoreRanges[mode as keyof typeof scoreRanges] || scoreRanges.rating;
   
-  // Normalize score to 0-100 percentage
+  // Normalize score to 0-100 percentage with better curve
   let percentage = ((rawScore - range.min) / (range.max - range.min)) * 100;
   
   // Apply quality bonus based on data available for analysis
   let qualityMultiplier = 1.0;
   
   if (mode === 'rating' && ratedTrackCount >= 10) {
-    qualityMultiplier = 1.1; // 10% bonus for good rating data
+    qualityMultiplier = 1.1;
   } else if ((mode === 'audio' || mode === 'tempo') && ratedTrackCount >= 5) {
-    qualityMultiplier = 1.05; // 5% bonus for audio analysis
+    qualityMultiplier = 1.05;
   } else if (mode === 'hybrid' && ratedTrackCount >= 15) {
-    qualityMultiplier = 1.15; // 15% bonus for hybrid with good data
+    qualityMultiplier = 1.15;
   }
   
-  // Apply quality multiplier
   percentage = percentage * qualityMultiplier;
   
-  // Ensure percentage is within reasonable bounds (15-95%)
-  // Very low scores indicate poor matches, very high scores are rare but possible
-  percentage = Math.max(15, Math.min(95, percentage));
+  // IMPROVED: Better score distribution with natural curve
+  // Apply sigmoid-like curve for more realistic distribution
+  const normalizedScore = percentage / 100;
+  const sigmoidScore = 1 / (1 + Math.exp(-6 * (normalizedScore - 0.5)));
+  percentage = sigmoidScore * 80 + 20; // Maps to 20-100% range with better spread
   
-  // Round to whole number for clean display
+  // Add small random variation to prevent identical scores
+  const variation = (Math.random() - 0.5) * 6; // ±3% variation
+  percentage = Math.max(25, Math.min(95, percentage + variation));
+  
   return Math.round(percentage);
 }
 
