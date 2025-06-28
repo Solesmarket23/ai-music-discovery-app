@@ -3273,9 +3273,9 @@ export default function MusicRecognitionApp() {
                           setTimeout(() => setShowToast(null), 4000);
                         }
                       }}
-                      className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30 rounded-full text-blue-300 hover:text-blue-200 transition-all duration-300"
+                      className="flex items-center px-2 py-0.5 bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30 rounded-full text-blue-300 hover:text-blue-200 transition-all duration-300 text-xs"
                     >
-                      <span>🧪 Test Audio Analysis</span>
+                      <span>Test Audio Analysis</span>
                     </motion.button>
                   )}
                   
