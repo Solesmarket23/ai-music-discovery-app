@@ -3617,8 +3617,8 @@ export default function MusicRecognitionApp() {
           >
             {/* Main Player Container */}
             <div className="bg-gradient-to-br from-black/80 via-gray-900/90 to-purple-900/80 backdrop-blur-3xl rounded-3xl shadow-2xl border border-white/10 overflow-hidden">
-              {/* Ambient Glow Effect */}
-              <div className="absolute inset-0 bg-gradient-to-r from-pink-500/20 via-purple-500/20 to-blue-500/20 animate-pulse opacity-60" />
+              {/* Ambient Glow Effect - Reduced intensity */}
+              <div className="absolute inset-0 bg-gradient-to-r from-pink-500/10 via-purple-500/10 to-blue-500/10 opacity-40" />
               
               {/* Progress Bar - Top of player */}
               <div className="relative">
@@ -3654,9 +3654,9 @@ export default function MusicRecognitionApp() {
                     {/* Album Art Placeholder */}
                     <motion.div 
                       className={`${isPlayerMinimized ? 'w-12 h-12' : 'w-16 h-16'} bg-gradient-to-br from-pink-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-xl relative overflow-hidden transition-all duration-300`}
-                      animate={{ rotate: isPlaying ? [0, 360] : 0 }}
+                      animate={{ rotate: isPlaying ? 360 : 0 }}
                       transition={{ 
-                        duration: 20, 
+                        duration: 30, 
                         repeat: isPlaying ? Infinity : 0, 
                         ease: "linear",
                         repeatType: "loop"
@@ -3665,15 +3665,9 @@ export default function MusicRecognitionApp() {
                       <Music className={`${isPlayerMinimized ? 'h-6 w-6' : 'h-8 w-8'} text-white transition-all duration-300`} />
                       {isPlaying && (
                         <motion.div 
-                          className="absolute inset-0 bg-white/20"
-                          animate={{ 
-                            background: [
-                              "radial-gradient(circle at 30% 40%, rgba(255,255,255,0.3) 0%, transparent 50%)",
-                              "radial-gradient(circle at 70% 40%, rgba(255,255,255,0.3) 0%, transparent 50%)",
-                              "radial-gradient(circle at 30% 40%, rgba(255,255,255,0.3) 0%, transparent 50%)"
-                            ]
-                          }}
-                          transition={{ duration: 2, repeat: Infinity }}
+                          className="absolute inset-0 bg-white/10"
+                          animate={{ opacity: [0.5, 0.8, 0.5] }}
+                          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
                         />
                       )}
                     </motion.div>
@@ -4934,11 +4928,11 @@ export default function MusicRecognitionApp() {
           dragElastic={0.1}
           dragMomentum={false}
           onDrag={(event, info) => {
-            setBottomDebugBoxY(info.point.y); // Track the current Y position
+            setBottomDebugBoxY(prev => Math.max(0, Math.min(400, prev + info.delta.y))); // Use relative drag delta, clamped
           }}
           whileDrag={{ scale: 1.05, boxShadow: "0 10px 30px rgba(0,0,0,0.3)" }}
           className="fixed right-4 bg-black/80 backdrop-blur-sm text-white p-3 rounded-lg text-xs z-50 cursor-grab active:cursor-grabbing select-none"
-          style={{ bottom: 16 - bottomDebugBoxY }}
+          style={{ bottom: 16 + bottomDebugBoxY }}
         >
           <div className="flex items-center justify-between mb-2">
             <span className="font-semibold text-green-400">Audio Analysis</span>
