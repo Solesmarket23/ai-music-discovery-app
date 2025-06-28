@@ -3238,7 +3238,7 @@ export default function MusicRecognitionApp() {
                 <div className="text-right flex flex-col space-y-2">
                   {/* Test Audio Analysis Button - Debug only */}
                   {musicLibrary.length > 0 && (
-                    <motion.button
+                                        <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={async () => {
@@ -3260,8 +3260,8 @@ export default function MusicRecognitionApp() {
                             totalFeatures: Object.keys(features).length
                           });
                           setShowToast({ 
-                            message: `🧪 Analysis complete! Features: ${Object.keys(features).length}, Advanced: ${hasAdvanced ? '✅' : '❌'}`, 
-                            show: true 
+                            message: `🧪 Analysis complete! Features: ${Object.keys(features).length}, Advanced: ${hasAdvanced ? '✅' : '❌'}`,
+                          show: true 
                           });
                           setTimeout(() => setShowToast(null), 5000);
                         } catch (error) {
@@ -3273,9 +3273,9 @@ export default function MusicRecognitionApp() {
                           setTimeout(() => setShowToast(null), 4000);
                         }
                       }}
-                      className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300"
+                      className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30 rounded-full text-blue-300 hover:text-blue-200 transition-all duration-300"
                     >
-                      🧪 Test Audio Analysis
+                      <span>🧪 Test Audio Analysis</span>
                     </motion.button>
                   )}
                   
