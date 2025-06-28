@@ -4924,7 +4924,7 @@ export default function MusicRecognitionApp() {
       {isPlaying && (
         <motion.div
           drag="y"
-          dragConstraints={{ top: -400, bottom: 400 }} // Can move almost full screen height with 50px margins
+          dragConstraints={{ top: -400, bottom: -12 }} // Can move almost full screen height with 50px margins
           dragElastic={0.1}
           dragMomentum={false}
           whileDrag={{ boxShadow: "0 10px 30px rgba(0,0,0,0.3)" }}
