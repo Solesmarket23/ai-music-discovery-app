@@ -1742,6 +1742,8 @@ export default function MusicRecognitionApp() {
     setIsAnalyzing(true);
 
     const newTracks: MusicTrack[] = [];
+    const duplicates: string[] = [];
+    const skippedFiles: string[] = [];
     
     // First, quickly add all tracks to the library without full analysis
     for (let i = 0; i < files.length; i++) {
@@ -1751,9 +1753,30 @@ export default function MusicRecognitionApp() {
           // Get basic duration first (quick operation)
           const duration = await getAudioDuration(file);
           
+          const songName = file.name.replace(/\.(mp3|wav|m4a)$/i, '');
+          
+          // Check for duplicates in existing library (multiple criteria)
+          const existingTrack = musicLibrary.find(track => {
+            const nameMatch = track.name.toLowerCase() === songName.toLowerCase();
+            const sizeMatch = track.file && Math.abs(track.file.size - file.size) < 1000; // Within 1KB
+            const durationMatch = Math.abs(track.duration - duration) < 2; // Within 2 seconds
+            
+            // Consider it a duplicate if name matches, or if both size and duration match closely
+            return nameMatch || (sizeMatch && durationMatch);
+          });
+          
+          if (existingTrack) {
+            const matchReason = existingTrack.name.toLowerCase() === songName.toLowerCase() 
+              ? 'same name' 
+              : 'same size and duration';
+            console.log(`🔍 Duplicate detected: "${songName}" already exists in library (${matchReason})`);
+            duplicates.push(`${songName} (${matchReason})`);
+            continue; // Skip this file
+          }
+          
           const track: MusicTrack = {
             id: `track-${Date.now()}-${i}`,
-            name: file.name.replace(/\.(mp3|wav|m4a)$/i, ''),
+            name: songName,
             file,
             url: URL.createObjectURL(file),
             duration: duration,
@@ -1771,19 +1794,45 @@ export default function MusicRecognitionApp() {
     // Apply any stored ratings to the new tracks
     const tracksWithStoredRatings = applyStoredRatings(newTracks);
     
-    // Add tracks to library immediately and switch view
-    setMusicLibrary(prev => [...prev, ...tracksWithStoredRatings]);
-    setCurrentView('library');
+    // Log upload results
+    console.log(`🎵 Upload complete:`, {
+      totalFiles: files.length,
+      newSongs: newTracks.length, 
+      duplicatesSkipped: duplicates.length,
+      duplicateNames: duplicates
+    });
+    
+    // Add tracks to library immediately and switch view (only if we have new tracks)
+    if (newTracks.length > 0) {
+      setMusicLibrary(prev => [...prev, ...tracksWithStoredRatings]);
+      setCurrentView('library');
+    }
     setIsAnalyzing(false);
 
-    // Show immediate feedback
+    // Show immediate feedback with duplicate information
+    let uploadMessage = '';
+    if (duplicates.length > 0) {
+      if (newTracks.length > 0) {
+        uploadMessage = `📁 ${newTracks.length} songs uploaded, ${duplicates.length} duplicates skipped! AI analysis running...`;
+      } else {
+        uploadMessage = `🔍 All ${duplicates.length} songs already exist in your library - no duplicates added!`;
+      }
+    } else {
+      uploadMessage = `📁 ${newTracks.length} songs uploaded! AI analysis running in background...`;
+    }
+    
     setShowToast({ 
-      message: `📁 ${newTracks.length} songs uploaded! AI analysis running in background...`, 
+      message: uploadMessage, 
       show: true 
     });
-    setTimeout(() => setShowToast(null), 3000);
+    setTimeout(() => setShowToast(null), duplicates.length > 0 ? 5000 : 3000);
 
     // Now perform analysis in background with small delays to keep UI responsive
+    if (newTracks.length === 0) {
+      console.log(`🎵 No new tracks to analyze - all files were duplicates`);
+      return;
+    }
+    
     console.log(`🎵 Starting background AI analysis for ${newTracks.length} files...`);
     
     let analyzedCount = 0;
