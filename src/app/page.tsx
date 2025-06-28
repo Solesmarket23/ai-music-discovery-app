@@ -4,6 +4,50 @@ import { useState, useRef, useEffect } from "react";
 import { Upload, Play, Pause, SkipForward, SkipBack, Shuffle, Star, Brain, Music, Volume2, Minimize2, Maximize2, Settings, Search, ChevronDown, ChevronUp, Save, RotateCcw, Eye, EyeOff, Zap, Palette, Monitor, Sun, Moon, Info, HelpCircle, Download, Upload as UploadIcon, Users, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+// Advanced Audio Analysis Types
+interface AudioFeatures {
+  // === PERCEPTUAL FEATURES ===
+  barkSpectrum?: number[];
+  harmonicContent?: {
+    complexity: number;
+    fundamentalFreq: number;
+    harmonics: number[];
+  };
+  emotionalTension?: number;
+  emotionalValence?: number;
+  emotionalArousal?: number;
+  
+  // === PRODUCTION SIGNATURE ===
+  compressionRatio?: number;
+  dynamicRange?: number;
+  perceivedLoudness?: number;
+  
+  // === TIMBRAL TEXTURE ===
+  brightness?: number;
+  warmth?: number;
+  roughness?: number;
+  
+  // === RHYTHMIC FEATURES ===
+  groove?: number;
+  syncopation?: number;
+  rhythmicComplexity?: number;
+  
+  // === MUSICAL STRUCTURE ===
+  keySignature?: string;
+  chordProgression?: string[];
+  tempo?: number;
+  
+  // === ENERGY PROFILE ===
+  energyDensity?: number;
+  energyFlow?: number;
+  
+  // === BASIC FEATURES ===
+  spectralCentroid?: number;
+  spectralRolloff?: number;
+  zeroCrossingRate?: number;
+  mfcc?: number[];
+}
+
 interface MusicTrack {
   id: string;
   name: string;
@@ -13,6 +57,7 @@ interface MusicTrack {
   rating?: number;
   analyzed?: boolean;
   matchPercentage?: number;
+  audioFeatures?: AudioFeatures;
 }
 
 interface AIInsights {
@@ -79,6 +124,9 @@ export default function MusicRecognitionApp() {
   const progressAnimationRef = useRef<number | null>(null);
   const lastUpdateTimeRef = useRef<number>(0);
   const lastAudioTimeRef = useRef<number>(0);
+  
+  // Component mount tracking to prevent setState after unmount
+  const isMountedRef = useRef<boolean>(true);
 
   // Local Storage Functions for Persistent Ratings
   const saveRatingsToStorage = (tracks: MusicTrack[]) => {
@@ -179,6 +227,603 @@ export default function MusicRecognitionApp() {
     }
   };
 
+  // === ADVANCED AUDIO FEATURE EXTRACTION ===
+  
+  // Extract comprehensive audio features from uploaded file
+  const extractAudioFeatures = async (file: File): Promise<AudioFeatures> => {
+    return new Promise((resolve) => {
+      const audio = new Audio();
+      const url = URL.createObjectURL(file);
+      
+      audio.addEventListener('loadedmetadata', async () => {
+        try {
+          // Create offline audio context for analysis
+          const offlineContext = new (window.OfflineAudioContext || (window as any).webkitOfflineAudioContext)(
+            1, // channels
+            audio.duration * 44100, // length (duration * sample rate)
+            44100 // sample rate
+          );
+          
+          // Decode audio file
+          const arrayBuffer = await file.arrayBuffer();
+          const audioBuffer = await offlineContext.decodeAudioData(arrayBuffer);
+          
+          // Extract features
+          const features = await analyzeAudioBuffer(audioBuffer, offlineContext);
+          
+          URL.revokeObjectURL(url);
+          resolve(features);
+        } catch (error) {
+          console.error('Audio feature extraction error:', error);
+          URL.revokeObjectURL(url);
+          resolve({}); // Return empty features on error
+        }
+      });
+      
+      audio.addEventListener('error', () => {
+        URL.revokeObjectURL(url);
+        resolve({}); // Return empty features on error
+      });
+      
+      audio.src = url;
+    });
+  };
+
+  // Analyze audio buffer to extract perceptual features
+  const analyzeAudioBuffer = async (audioBuffer: AudioBuffer, context: OfflineAudioContext): Promise<AudioFeatures> => {
+    const channelData = audioBuffer.getChannelData(0); // Use first channel
+    const sampleRate = audioBuffer.sampleRate;
+    const features: AudioFeatures = {};
+
+    // === BASIC SPECTRAL FEATURES ===
+    features.spectralCentroid = calculateSpectralCentroid(channelData, sampleRate);
+    features.spectralRolloff = calculateSpectralRolloff(channelData, sampleRate);
+    features.zeroCrossingRate = calculateZeroCrossingRate(channelData);
+    features.mfcc = calculateMFCC(channelData, sampleRate);
+
+    // === PERCEPTUAL BARK SPECTRUM ===
+    features.barkSpectrum = calculateBarkSpectrum(channelData, sampleRate);
+
+    // === HARMONIC ANALYSIS ===
+    features.harmonicContent = analyzeHarmonics(channelData, sampleRate);
+
+    // === EMOTIONAL PROFILING ===
+    const emotionalProfile = analyzeEmotionalProfile(channelData, sampleRate);
+    features.emotionalTension = emotionalProfile.tension;
+    features.emotionalValence = emotionalProfile.valence;
+    features.emotionalArousal = emotionalProfile.arousal;
+
+    // === PRODUCTION SIGNATURE ===
+    features.compressionRatio = calculateCompressionRatio(channelData);
+    features.dynamicRange = calculateDynamicRange(channelData);
+    features.perceivedLoudness = calculatePerceivedLoudness(channelData);
+
+    // === TIMBRAL TEXTURE ===
+    const timbralTexture = analyzeTimbralTexture(channelData, sampleRate);
+    features.brightness = timbralTexture.brightness;
+    features.warmth = timbralTexture.warmth;
+    features.roughness = timbralTexture.roughness;
+
+    // === RHYTHMIC ANALYSIS ===
+    const rhythmicProfile = analyzeRhythmicProfile(channelData, sampleRate);
+    features.groove = rhythmicProfile.groove;
+    features.syncopation = rhythmicProfile.syncopation;
+    features.rhythmicComplexity = rhythmicProfile.complexity;
+
+    // === TEMPO DETECTION ===
+    features.tempo = detectTempo(channelData, sampleRate);
+
+    // === ENERGY ANALYSIS ===
+    const energyProfile = analyzeEnergyProfile(channelData, sampleRate);
+    features.energyDensity = energyProfile.density;
+    features.energyFlow = energyProfile.flow;
+
+    // === KEY DETECTION ===
+    features.keySignature = detectMusicalKey(channelData, sampleRate);
+
+    return features;
+  };
+
+  // === AUDIO ANALYSIS FUNCTIONS ===
+
+  // Basic spectral features
+  const calculateSpectralCentroid = (audioData: Float32Array, sampleRate: number): number => {
+    const fft = performFFT(audioData);
+    let weightedSum = 0;
+    let magnitudeSum = 0;
+    
+    for (let i = 0; i < fft.length / 2; i++) {
+      const magnitude = Math.sqrt(fft[i * 2] ** 2 + fft[i * 2 + 1] ** 2);
+      const frequency = (i * sampleRate) / fft.length;
+      weightedSum += frequency * magnitude;
+      magnitudeSum += magnitude;
+    }
+    
+    return magnitudeSum > 0 ? weightedSum / magnitudeSum : 0;
+  };
+
+  const calculateSpectralRolloff = (audioData: Float32Array, sampleRate: number): number => {
+    const fft = performFFT(audioData);
+    const magnitudes: number[] = [];
+    let totalEnergy = 0;
+    
+    for (let i = 0; i < fft.length / 2; i++) {
+      const magnitude = Math.sqrt(fft[i * 2] ** 2 + fft[i * 2 + 1] ** 2);
+      magnitudes.push(magnitude);
+      totalEnergy += magnitude ** 2;
+    }
+    
+    const rolloffThreshold = 0.85 * totalEnergy;
+    let cumulativeEnergy = 0;
+    
+    for (let i = 0; i < magnitudes.length; i++) {
+      cumulativeEnergy += magnitudes[i] ** 2;
+      if (cumulativeEnergy >= rolloffThreshold) {
+        return (i * sampleRate) / (fft.length);
+      }
+    }
+    
+    return sampleRate / 2;
+  };
+
+  const calculateZeroCrossingRate = (audioData: Float32Array): number => {
+    let crossings = 0;
+    for (let i = 1; i < audioData.length; i++) {
+      if ((audioData[i] >= 0) !== (audioData[i - 1] >= 0)) {
+        crossings++;
+      }
+    }
+    return crossings / audioData.length;
+  };
+
+  const calculateMFCC = (audioData: Float32Array, sampleRate: number): number[] => {
+    // Simplified MFCC calculation
+    const fft = performFFT(audioData);
+    const melFilters = createMelFilterBank(13, fft.length / 2, sampleRate);
+    const mfcc: number[] = [];
+    
+    for (let i = 0; i < 13; i++) {
+      let sum = 0;
+      for (let j = 0; j < fft.length / 2; j++) {
+        const magnitude = Math.sqrt(fft[j * 2] ** 2 + fft[j * 2 + 1] ** 2);
+        sum += magnitude * melFilters[i][j];
+      }
+      mfcc.push(Math.log(Math.max(sum, 1e-10)));
+    }
+    
+    return mfcc;
+  };
+
+  // Perceptual features
+  const calculateBarkSpectrum = (audioData: Float32Array, sampleRate: number): number[] => {
+    const fft = performFFT(audioData);
+    const barkBands = 24;
+    const spectrum: number[] = [];
+    
+    for (let i = 0; i < barkBands; i++) {
+      const freq = barkToFreq(i);
+      const bin = Math.floor((freq * fft.length) / sampleRate);
+      if (bin < fft.length / 2) {
+        const magnitude = Math.sqrt(fft[bin * 2] ** 2 + fft[bin * 2 + 1] ** 2);
+        spectrum.push(magnitude);
+      } else {
+        spectrum.push(0);
+      }
+    }
+    
+    return spectrum;
+  };
+
+  const analyzeHarmonics = (audioData: Float32Array, sampleRate: number) => {
+    const fft = performFFT(audioData);
+    const fundamentalFreq = findFundamentalFrequency(fft, sampleRate);
+    const harmonics: number[] = [];
+    
+    // Find first 10 harmonics
+    for (let h = 1; h <= 10; h++) {
+      const harmonicFreq = fundamentalFreq * h;
+      const bin = Math.floor((harmonicFreq * fft.length) / sampleRate);
+      if (bin < fft.length / 2) {
+        const magnitude = Math.sqrt(fft[bin * 2] ** 2 + fft[bin * 2 + 1] ** 2);
+        harmonics.push(magnitude);
+      }
+    }
+    
+    const complexity = harmonics.length > 0 ? 
+      harmonics.reduce((sum, h) => sum + h, 0) / harmonics[0] : 0;
+    
+    return {
+      complexity: Math.min(complexity, 10), // Normalize to 0-10 range
+      fundamentalFreq,
+      harmonics
+    };
+  };
+
+  const analyzeEmotionalProfile = (audioData: Float32Array, sampleRate: number) => {
+    const fft = performFFT(audioData);
+    
+    // Tension: based on dissonance and spectral irregularity
+    const tension = calculateSpectralIrregularity(fft);
+    
+    // Valence: based on major/minor tonality and brightness
+    const valence = calculateTonalValence(fft, sampleRate);
+    
+    // Arousal: based on tempo and energy
+    const arousal = calculateSpectralEnergy(fft);
+    
+    return {
+      tension: Math.max(0, Math.min(1, tension)),
+      valence: Math.max(0, Math.min(1, valence)),
+      arousal: Math.max(0, Math.min(1, arousal))
+    };
+  };
+
+  // Production signature analysis
+  const calculateCompressionRatio = (audioData: Float32Array): number => {
+    // Analyze dynamic range compression
+    const windows = splitIntoWindows(audioData, 1024);
+    const peakRatios: number[] = [];
+    
+    windows.forEach(window => {
+      const rms = calculateRMS(window);
+      let peak = 0;
+      for (let i = 0; i < window.length; i++) {
+        const abs = Math.abs(window[i]);
+        if (abs > peak) peak = abs;
+      }
+      if (peak > 0) {
+        peakRatios.push(rms / peak);
+      }
+    });
+    
+    return peakRatios.length > 0 ? 
+      peakRatios.reduce((sum, ratio) => sum + ratio, 0) / peakRatios.length : 0;
+  };
+
+  const calculateDynamicRange = (audioData: Float32Array): number => {
+    let max = 0;
+    for (let i = 0; i < audioData.length; i++) {
+      const abs = Math.abs(audioData[i]);
+      if (abs > max) max = abs;
+    }
+    const rms = calculateRMS(audioData);
+    return max > 0 ? 20 * Math.log10(max / Math.max(rms, 1e-10)) : 0;
+  };
+
+  const calculatePerceivedLoudness = (audioData: Float32Array): number => {
+    return 20 * Math.log10(Math.max(calculateRMS(audioData), 1e-10));
+  };
+
+  // Timbral texture analysis
+  const analyzeTimbralTexture = (audioData: Float32Array, sampleRate: number) => {
+    const fft = performFFT(audioData);
+    
+    // Brightness: energy in high frequencies
+    let highFreqEnergy = 0;
+    let totalEnergy = 0;
+    
+    for (let i = 0; i < fft.length / 2; i++) {
+      const magnitude = Math.sqrt(fft[i * 2] ** 2 + fft[i * 2 + 1] ** 2);
+      const freq = (i * sampleRate) / fft.length;
+      
+      totalEnergy += magnitude;
+      if (freq > 5000) {
+        highFreqEnergy += magnitude;
+      }
+    }
+    
+    const brightness = totalEnergy > 0 ? highFreqEnergy / totalEnergy : 0;
+    
+    // Warmth: energy in mid-low frequencies
+    let midLowEnergy = 0;
+    for (let i = 0; i < fft.length / 2; i++) {
+      const magnitude = Math.sqrt(fft[i * 2] ** 2 + fft[i * 2 + 1] ** 2);
+      const freq = (i * sampleRate) / fft.length;
+      
+      if (freq >= 200 && freq <= 1000) {
+        midLowEnergy += magnitude;
+      }
+    }
+    
+    const warmth = totalEnergy > 0 ? midLowEnergy / totalEnergy : 0;
+    
+    // Roughness: spectral irregularity
+    const roughness = calculateSpectralIrregularity(fft);
+    
+    return { brightness, warmth, roughness };
+  };
+
+  // Rhythmic analysis
+  const analyzeRhythmicProfile = (audioData: Float32Array, sampleRate: number) => {
+    const tempo = detectTempo(audioData, sampleRate);
+    
+    // Groove: regularity of beat patterns
+    const groove = calculateGroove(audioData, sampleRate, tempo);
+    
+    // Syncopation: off-beat emphasis
+    const syncopation = calculateSyncopation(audioData, sampleRate, tempo);
+    
+    // Rhythmic complexity: variation in patterns
+    const complexity = calculateRhythmicComplexity(audioData, sampleRate);
+    
+    return { groove, syncopation, complexity };
+  };
+
+  const detectTempo = (audioData: Float32Array, sampleRate: number): number => {
+    // Simplified tempo detection using autocorrelation
+    const windowSize = Math.floor(sampleRate * 4); // 4 second window
+    const minTempo = 60; // BPM
+    const maxTempo = 200; // BPM
+    
+    const minPeriod = Math.floor(60 * sampleRate / maxTempo);
+    const maxPeriod = Math.floor(60 * sampleRate / minTempo);
+    
+    let maxCorrelation = 0;
+    let bestTempo = 120; // Default tempo
+    
+    for (let period = minPeriod; period <= maxPeriod; period++) {
+      let correlation = 0;
+      for (let i = 0; i < Math.min(windowSize, audioData.length - period); i++) {
+        correlation += audioData[i] * audioData[i + period];
+      }
+      
+      if (correlation > maxCorrelation) {
+        maxCorrelation = correlation;
+        bestTempo = 60 * sampleRate / period;
+      }
+    }
+    
+    return Math.round(bestTempo);
+  };
+
+  const analyzeEnergyProfile = (audioData: Float32Array, sampleRate: number) => {
+    const windowSize = Math.floor(sampleRate * 0.1); // 100ms windows
+    const windows = splitIntoWindows(audioData, windowSize);
+    
+    // Energy density: average energy per window
+    const energies = windows.map(window => calculateRMS(window));
+    const density = energies.reduce((sum, e) => sum + e, 0) / energies.length;
+    
+    // Energy flow: how energy changes over time
+    let flow = 0;
+    for (let i = 1; i < energies.length; i++) {
+      flow += Math.abs(energies[i] - energies[i - 1]);
+    }
+    flow = flow / (energies.length - 1);
+    
+    return { density, flow };
+  };
+
+  const detectMusicalKey = (audioData: Float32Array, sampleRate: number): string => {
+    const fft = performFFT(audioData);
+    const chromaVector = calculateChromaVector(fft, sampleRate);
+    
+    // Key profiles for major and minor keys
+    const keyProfiles = {
+      'C': [1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1],
+      'C#': [1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0],
+      // Add more key profiles as needed
+    };
+    
+    let bestKey = 'C';
+    let maxCorrelation = 0;
+    
+    Object.entries(keyProfiles).forEach(([key, profile]) => {
+      let correlation = 0;
+      for (let i = 0; i < 12; i++) {
+        correlation += chromaVector[i] * profile[i];
+      }
+      
+      if (correlation > maxCorrelation) {
+        maxCorrelation = correlation;
+        bestKey = key;
+      }
+    });
+    
+    return bestKey;
+  };
+
+  // === HELPER FUNCTIONS ===
+
+  const performFFT = (audioData: Float32Array): Float32Array => {
+    // Simplified FFT implementation
+    const N = Math.pow(2, Math.floor(Math.log2(audioData.length)));
+    const result = new Float32Array(N * 2);
+    
+    // Copy and zero-pad if necessary
+    for (let i = 0; i < N; i++) {
+      result[i * 2] = i < audioData.length ? audioData[i] : 0; // Real part
+      result[i * 2 + 1] = 0; // Imaginary part
+    }
+    
+    // Simple DFT for now (in production, use proper FFT library)
+    for (let k = 0; k < N; k++) {
+      let realSum = 0;
+      let imagSum = 0;
+      
+      for (let n = 0; n < N; n++) {
+        const angle = (-2 * Math.PI * k * n) / N;
+        realSum += audioData[n] * Math.cos(angle);
+        imagSum += audioData[n] * Math.sin(angle);
+      }
+      
+      result[k * 2] = realSum;
+      result[k * 2 + 1] = imagSum;
+    }
+    
+    return result;
+  };
+
+  const createMelFilterBank = (numFilters: number, fftSize: number, sampleRate: number): number[][] => {
+    const filters: number[][] = [];
+    const melMax = 2595 * Math.log10(1 + (sampleRate / 2) / 700);
+    
+    for (let i = 0; i < numFilters; i++) {
+      const filter = new Array(fftSize).fill(0);
+      const melCenter = (i + 1) * melMax / (numFilters + 1);
+      const freqCenter = 700 * (Math.pow(10, melCenter / 2595) - 1);
+      const binCenter = Math.floor((freqCenter * fftSize * 2) / sampleRate);
+      
+      // Simple triangular filter
+      for (let j = Math.max(0, binCenter - 10); j < Math.min(fftSize, binCenter + 10); j++) {
+        filter[j] = 1 - Math.abs(j - binCenter) / 10;
+      }
+      
+      filters.push(filter);
+    }
+    
+    return filters;
+  };
+
+  const barkToFreq = (bark: number): number => {
+    return 600 * Math.sinh(bark / 4);
+  };
+
+  const findFundamentalFrequency = (fft: Float32Array, sampleRate: number): number => {
+    let maxMagnitude = 0;
+    let fundamentalBin = 0;
+    
+    // Look for fundamental in typical vocal/instrument range (80-800 Hz)
+    const minBin = Math.floor((80 * fft.length) / sampleRate);
+    const maxBin = Math.floor((800 * fft.length) / sampleRate);
+    
+    for (let i = minBin; i < Math.min(maxBin, fft.length / 2); i++) {
+      const magnitude = Math.sqrt(fft[i * 2] ** 2 + fft[i * 2 + 1] ** 2);
+      if (magnitude > maxMagnitude) {
+        maxMagnitude = magnitude;
+        fundamentalBin = i;
+      }
+    }
+    
+    return (fundamentalBin * sampleRate) / fft.length;
+  };
+
+  const calculateSpectralIrregularity = (fft: Float32Array): number => {
+    let irregularity = 0;
+    for (let i = 1; i < fft.length / 2 - 1; i++) {
+      const current = Math.sqrt(fft[i * 2] ** 2 + fft[i * 2 + 1] ** 2);
+      const prev = Math.sqrt(fft[(i - 1) * 2] ** 2 + fft[(i - 1) * 2 + 1] ** 2);
+      const next = Math.sqrt(fft[(i + 1) * 2] ** 2 + fft[(i + 1) * 2 + 1] ** 2);
+      
+      if (prev + next > 0) {
+        irregularity += Math.abs(current - (prev + next) / 2) / (prev + next);
+      }
+    }
+    
+    return irregularity / (fft.length / 2 - 2);
+  };
+
+  const calculateTonalValence = (fft: Float32Array, sampleRate: number): number => {
+    // Simplified major/minor detection based on thirds
+    const chromaVector = calculateChromaVector(fft, sampleRate);
+    
+    // Major chord tends to have strong root, major third, and fifth
+    const majorScore = chromaVector[0] + chromaVector[4] + chromaVector[7]; // C, E, G
+    const minorScore = chromaVector[0] + chromaVector[3] + chromaVector[7]; // C, Eb, G
+    
+    return majorScore > minorScore ? 0.7 : 0.3; // Simplified mapping
+  };
+
+  const calculateSpectralEnergy = (fft: Float32Array): number => {
+    let energy = 0;
+    for (let i = 0; i < fft.length / 2; i++) {
+      const magnitude = Math.sqrt(fft[i * 2] ** 2 + fft[i * 2 + 1] ** 2);
+      energy += magnitude ** 2;
+    }
+    return Math.sqrt(energy) / (fft.length / 2);
+  };
+
+  const splitIntoWindows = (audioData: Float32Array, windowSize: number): Float32Array[] => {
+    const windows: Float32Array[] = [];
+    for (let i = 0; i < audioData.length; i += windowSize) {
+      const window = audioData.slice(i, Math.min(i + windowSize, audioData.length));
+      windows.push(window);
+    }
+    return windows;
+  };
+
+  const calculateRMS = (audioData: Float32Array): number => {
+    let sum = 0;
+    for (let i = 0; i < audioData.length; i++) {
+      sum += audioData[i] ** 2;
+    }
+    return Math.sqrt(sum / audioData.length);
+  };
+
+  const calculateGroove = (audioData: Float32Array, sampleRate: number, tempo: number): number => {
+    // Simplified groove calculation based on beat regularity
+    const beatInterval = Math.floor((60 * sampleRate) / tempo);
+    const windows = splitIntoWindows(audioData, beatInterval);
+    
+    if (windows.length < 2) return 0;
+    
+    const energies = windows.map(window => calculateRMS(window));
+    const meanEnergy = energies.reduce((sum, e) => sum + e, 0) / energies.length;
+    const variance = energies.reduce((sum, e) => sum + (e - meanEnergy) ** 2, 0) / energies.length;
+    
+    return 1 - Math.min(variance / (meanEnergy ** 2), 1);
+  };
+
+  const calculateSyncopation = (audioData: Float32Array, sampleRate: number, tempo: number): number => {
+    // Simplified syncopation detection
+    const beatInterval = Math.floor((60 * sampleRate) / tempo);
+    const offBeatOffset = Math.floor(beatInterval / 2);
+    
+    let onBeatEnergy = 0;
+    let offBeatEnergy = 0;
+    let count = 0;
+    
+    for (let i = 0; i < audioData.length - beatInterval; i += beatInterval) {
+      onBeatEnergy += Math.abs(audioData[i]);
+      if (i + offBeatOffset < audioData.length) {
+        offBeatEnergy += Math.abs(audioData[i + offBeatOffset]);
+      }
+      count++;
+    }
+    
+    const avgOnBeat = onBeatEnergy / count;
+    const avgOffBeat = offBeatEnergy / count;
+    
+    return avgOnBeat > 0 ? avgOffBeat / (avgOnBeat + avgOffBeat) : 0;
+  };
+
+  const calculateRhythmicComplexity = (audioData: Float32Array, sampleRate: number): number => {
+    // Analyze rhythmic patterns using autocorrelation
+    const windowSize = Math.floor(sampleRate * 2); // 2 second window
+    let complexity = 0;
+    
+    for (let lag = 1; lag < Math.min(windowSize / 4, audioData.length / 4); lag++) {
+      let correlation = 0;
+      for (let i = 0; i < Math.min(windowSize, audioData.length - lag); i++) {
+        correlation += audioData[i] * audioData[i + lag];
+      }
+      complexity += Math.abs(correlation);
+    }
+    
+    return 1 - (complexity / windowSize); // Invert so higher = more complex
+  };
+
+  const calculateChromaVector = (fft: Float32Array, sampleRate: number): number[] => {
+    const chroma = new Array(12).fill(0);
+    
+    for (let i = 1; i < fft.length / 2; i++) {
+      const frequency = (i * sampleRate) / fft.length;
+      const magnitude = Math.sqrt(fft[i * 2] ** 2 + fft[i * 2 + 1] ** 2);
+      
+      if (frequency > 80 && frequency < 5000) {
+        const pitch = 12 * Math.log2(frequency / 440) + 69; // MIDI note number
+        const chromaIndex = Math.round(pitch) % 12;
+        if (chromaIndex >= 0 && chromaIndex < 12) {
+          chroma[chromaIndex] += magnitude;
+        }
+      }
+    }
+    
+    // Normalize
+    const sum = chroma.reduce((s, c) => s + c, 0);
+    return sum > 0 ? chroma.map(c => c / sum) : chroma;
+  };
+
   // Real-time audio visualization using Web Audio API
   const updateVisualization = () => {
     if (!analyserRef.current || !isPlaying || !audioContextRef.current) return;
@@ -271,6 +916,7 @@ export default function MusicRecognitionApp() {
   // Cleanup audio context and animations on unmount
   useEffect(() => {
     return () => {
+      isMountedRef.current = false; // Mark component as unmounted
       if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
         audioContextRef.current.close();
       }
@@ -405,35 +1051,122 @@ export default function MusicRecognitionApp() {
     });
   };
 
-  // Handle file uploads
+  // Handle file uploads with advanced audio analysis
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files) return;
 
+    console.log(`🎵 Starting upload for ${files.length} files...`);
+    setIsAnalyzing(true);
+
     const newTracks: MusicTrack[] = [];
     
+    // First, quickly add all tracks to the library without full analysis
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       if (file.type.includes('audio')) {
-        // Get actual duration from audio file
-        const duration = await getAudioDuration(file);
-        
-        const track: MusicTrack = {
-          id: `track-${Date.now()}-${i}`,
-          name: file.name.replace(/\.(mp3|wav|m4a)$/i, ''),
-          file,
-          url: URL.createObjectURL(file),
-          duration: duration,
-        };
-        newTracks.push(track);
+        try {
+          // Get basic duration first (quick operation)
+          const duration = await getAudioDuration(file);
+          
+          const track: MusicTrack = {
+            id: `track-${Date.now()}-${i}`,
+            name: file.name.replace(/\.(mp3|wav|m4a)$/i, ''),
+            file,
+            url: URL.createObjectURL(file),
+            duration: duration,
+            analyzed: false, // Will be analyzed in background
+          };
+          
+          newTracks.push(track);
+          
+        } catch (error) {
+          console.error(`❌ Failed to process: ${file.name}`, error);
+        }
       }
     }
 
     // Apply any stored ratings to the new tracks
     const tracksWithStoredRatings = applyStoredRatings(newTracks);
     
+    // Add tracks to library immediately and switch view
     setMusicLibrary(prev => [...prev, ...tracksWithStoredRatings]);
-    setCurrentView('library'); // Auto-switch to library view after upload
+    setCurrentView('library');
+    setIsAnalyzing(false);
+
+    // Show immediate feedback
+    setShowToast({ 
+      message: `📁 ${newTracks.length} songs uploaded! AI analysis running in background...`, 
+      show: true 
+    });
+    setTimeout(() => setShowToast(null), 3000);
+
+    // Now perform analysis in background with small delays to keep UI responsive
+    console.log(`🎵 Starting background AI analysis for ${newTracks.length} files...`);
+    
+    let analyzedCount = 0;
+    for (const track of newTracks) {
+      try {
+        // Check if component is still mounted before continuing
+        if (!isMountedRef.current) {
+          console.log('🚫 Component unmounted, stopping background analysis');
+          break;
+        }
+        
+        // Small delay to prevent UI blocking (reduced for faster analysis)
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        console.log(`🔬 Analyzing: ${track.name}`);
+        
+        // Extract comprehensive audio features
+        const audioFeatures = await extractAudioFeatures(track.file);
+        
+        // Update the track in the library (only if component is still mounted)
+        if (isMountedRef.current) {
+          setMusicLibrary(prev => prev.map(t => 
+            t.id === track.id 
+              ? { ...t, audioFeatures, analyzed: true }
+              : t
+          ));
+        }
+        
+        analyzedCount++;
+        
+        console.log(`✅ Analysis complete for: ${track.name} (${analyzedCount}/${newTracks.length})`, {
+          duration: Math.round(track.duration),
+          tempo: audioFeatures.tempo,
+          key: audioFeatures.keySignature,
+          features: Object.keys(audioFeatures).length
+        });
+        
+      } catch (error) {
+        console.error(`❌ Analysis failed for: ${track.name}`, error);
+        
+        // Mark as analyzed even if failed to prevent retries (only if component is still mounted)
+        if (isMountedRef.current) {
+          setMusicLibrary(prev => prev.map(t => 
+            t.id === track.id 
+              ? { ...t, analyzed: true }
+              : t
+          ));
+        }
+      }
+    }
+
+    console.log(`🎯 Background AI analysis complete! Analyzed ${analyzedCount}/${newTracks.length} tracks`);
+    
+    // Show completion toast (only if component is still mounted)
+    if (isMountedRef.current) {
+      setShowToast({ 
+        message: `✨ AI Analysis Complete! ${analyzedCount} songs analyzed with advanced features.`, 
+        show: true 
+      });
+      setTimeout(() => {
+        if (isMountedRef.current) {
+          setShowToast(null);
+        }
+      }, 4000);
+    }
   };
 
   // Audio controls
@@ -641,7 +1374,7 @@ export default function MusicRecognitionApp() {
     // Show toast notification
     const ratingMessages = {
       1: "Skip this! 🚫", 2: "Not great 😑", 3: "Meh... ⚠️",
-      4: "It's okay 😐", 5: "Pretty good 👍", 6: "Nice! 😊",
+                      4: "It&apos;s okay 😐", 5: "Pretty good 👍", 6: "Nice! 😊",
       7: "Love it! ❤️", 8: "Amazing! 🔥", 9: "Incredible! ⭐", 10: "Masterpiece! 🎵✨"
     };
     setShowToast({ 
@@ -723,15 +1456,55 @@ export default function MusicRecognitionApp() {
     }
   };
 
-  // AI Recommendations using real AI API
+  // AI Recommendations using real AI API with advanced audio features
   const generateRecommendations = async () => {
-    if (aiInsights.totalRatedSongs < 20) return;
+    if (aiInsights.totalRatedSongs < 5) return; // Lower threshold since we have advanced analysis
     
     setIsAnalyzing(true);
     
     try {
       const ratedTracks = musicLibrary.filter(track => track.rating);
       const unratedTracks = musicLibrary.filter(track => !track.rating);
+      
+      // Check if rated tracks are analyzed - prioritize analyzing them if not
+      const unanalyzedRatedTracks = ratedTracks.filter(track => !track.analyzed);
+      if (unanalyzedRatedTracks.length > 0) {
+        console.log(`🔬 Found ${unanalyzedRatedTracks.length} unanalyzed rated tracks. Analyzing now for better recommendations...`);
+        setShowToast({ 
+          message: `🔬 Analyzing ${unanalyzedRatedTracks.length} rated songs for better recommendations...`, 
+          show: true 
+        });
+        
+        // Analyze rated tracks first (no delay for priority analysis)
+        for (const track of unanalyzedRatedTracks) {
+          try {
+            console.log(`🎯 Priority analyzing: ${track.name}`);
+            const audioFeatures = await extractAudioFeatures(track.file);
+            
+            // Update the track immediately
+            setMusicLibrary(prev => prev.map(t => 
+              t.id === track.id 
+                ? { ...t, audioFeatures, analyzed: true }
+                : t
+            ));
+            
+            // Update local reference for this session
+            track.audioFeatures = audioFeatures;
+            track.analyzed = true;
+            
+          } catch (error) {
+            console.error(`❌ Priority analysis failed for: ${track.name}`, error);
+            track.analyzed = true; // Mark as analyzed even if failed
+          }
+        }
+        
+        setShowToast({ 
+          message: `✅ Rated tracks analyzed! Generating advanced recommendations...`, 
+          show: true 
+        });
+      }
+      
+      console.log(`🧠 Generating AI recommendations based on ${ratedTracks.length} rated tracks with advanced features...`);
       
       const response = await fetch('/api/music-ai/recommendations', {
         method: 'POST',
@@ -740,26 +1513,52 @@ export default function MusicRecognitionApp() {
         },
         body: JSON.stringify({
           ratedTracks: ratedTracks.map(track => ({
+            id: track.id,
             name: track.name,
-            rating: track.rating
+            rating: track.rating,
+            duration: track.duration,
+            audioFeatures: track.audioFeatures, // Include extracted features
+            analyzed: track.analyzed
           })),
           unratedTracks: unratedTracks.map(track => ({
             id: track.id,
-            name: track.name
+            name: track.name,
+            duration: track.duration,
+            audioFeatures: track.audioFeatures, // Include extracted features
+            analyzed: track.analyzed
           })),
-          trainingMode: aiTrainingMode
+          trainingMode: aiTrainingMode,
+          audioFeatures: {
+            // Summary of available features
+            totalAnalyzed: musicLibrary.filter(t => t.analyzed).length,
+            featuresAvailable: ratedTracks.some(t => t.audioFeatures)
+          }
         })
       });
       
       const data = await response.json();
       
       if (data.success) {
-        // Map AI recommendations back to full track objects
+        // Map AI recommendations back to full track objects with match percentages
         const recommendedTracks = data.recommendations
-          .map((rec: any) => unratedTracks.find(track => track.id === rec.id))
+          .map((rec: any) => {
+            const originalTrack = unratedTracks.find(track => track.id === rec.id);
+            return originalTrack ? {
+              ...originalTrack,
+              matchPercentage: rec.matchPercentage
+            } : null;
+          })
           .filter(Boolean);
         
         setRecommendations(recommendedTracks);
+        console.log(`🎯 Generated ${recommendedTracks.length} AI recommendations with advanced audio analysis!`);
+        
+        // Show success feedback
+        setShowToast({ 
+          message: `🚀 AI found ${recommendedTracks.length} perfect matches using advanced audio analysis!`, 
+          show: true 
+        });
+        setTimeout(() => setShowToast(null), 4000);
       } else {
         // Fallback to simple recommendation
         const unratedSongs = musicLibrary.filter(track => !track.rating);
@@ -767,6 +1566,12 @@ export default function MusicRecognitionApp() {
       }
     } catch (error) {
       console.error('Failed to get AI recommendations:', error);
+      setShowToast({ 
+        message: `❌ Failed to generate recommendations`, 
+        show: true 
+      });
+      setTimeout(() => setShowToast(null), 3000);
+      
       // Fallback to simple recommendation
       const unratedSongs = musicLibrary.filter(track => !track.rating);
       setRecommendations(unratedSongs.slice(0, 5));
@@ -1780,7 +2585,7 @@ export default function MusicRecognitionApp() {
                         />
                       </div>
                       <p className="text-xs text-gray-500 mt-1">
-                        Based on your rating preferences, this song has a {track.matchPercentage}% likelihood you'll enjoy it. <span className="text-green-400 font-medium">Highly recommended!</span>
+                        Based on your rating preferences, this song has a {track.matchPercentage}% likelihood you&apos;ll enjoy it. <span className="text-green-400 font-medium">Highly recommended!</span>
                       </p>
                     </motion.div>
 
@@ -1810,7 +2615,7 @@ export default function MusicRecognitionApp() {
                         <div className="flex items-center mt-2">
                           <div className="flex items-center">
                             {track.rating <= 3 && <span className="text-xs text-red-400">😬 Skip 🙈</span>}
-                            {track.rating >= 4 && track.rating <= 6 && <span className="text-xs text-yellow-400">😐 It's OK 😐</span>}
+                            {track.rating >= 4 && track.rating <= 6 && <span className="text-xs text-yellow-400">😐 It&apos;s OK 😐</span>}
                             {track.rating >= 7 && track.rating <= 8 && <span className="text-xs text-green-400">😍 Love it! ❤️</span>}
                             {track.rating >= 9 && <span className="text-xs text-purple-400">🔥 Masterpiece 🏆</span>}
                           </div>
@@ -2359,7 +3164,7 @@ export default function MusicRecognitionApp() {
                           className="text-yellow-400"
                           whileHover={{ scale: 1.1 }}
                         >
-                          4-6: It's OK 😐
+                          4-6: It&apos;s OK 😐
                         </motion.span>
                         <motion.span 
                           className="text-green-400"
@@ -2573,7 +3378,7 @@ export default function MusicRecognitionApp() {
                       $99.99<span className="text-sm text-gray-300">/year</span>
                     </div>
                     <p className="text-sm text-green-400 font-semibold">Save $19.89 (17% off)</p>
-                    <p className="text-xs text-gray-400 mt-1">That's $8.33/month</p>
+                    <p className="text-xs text-gray-400 mt-1">That&apos;s $8.33/month</p>
                   </div>
                   
                   {/* Selection Indicator */}
@@ -3447,7 +4252,7 @@ export default function MusicRecognitionApp() {
                       $99.99<span className="text-sm text-gray-300">/year</span>
                     </div>
                     <p className="text-sm text-green-400 font-semibold">Save $19.89 (17% off)</p>
-                    <p className="text-xs text-gray-400 mt-1">That's $8.33/month</p>
+                    <p className="text-xs text-gray-400 mt-1">That&apos;s $8.33/month</p>
                   </div>
                   
                   {/* Selection Indicator */}
