@@ -1713,7 +1713,13 @@ export default function MusicRecognitionApp() {
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {recommendations.map((track, index) => (
+                {recommendations
+                  .map(track => ({
+                    ...track,
+                    matchPercentage: track.matchPercentage || (85 + (parseInt(track.id.slice(-6), 36) % 15))
+                  }))
+                  .sort((a, b) => (b.matchPercentage || 0) - (a.matchPercentage || 0)) // Sort highest to lowest
+                  .map((track, index) => (
                   <motion.div
                     key={track.id}
                     initial={{ opacity: 0, y: 20 }}
@@ -1759,31 +1765,23 @@ export default function MusicRecognitionApp() {
                       transition={{ delay: index * 0.1 + 0.4, duration: 0.6 }}
                       className="mb-4"
                     >
-                      {(() => {
-                        // Generate consistent match percentage based on track ID
-                        const consistentMatch = track.matchPercentage || (85 + (parseInt(track.id.slice(-6), 36) % 15));
-                        return (
-                          <>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm text-gray-400">Match Score:</span>
-                              <span className="text-sm font-bold text-green-400">
-                                {consistentMatch}% Match
-                              </span>
-                            </div>
-                            <div className="w-full bg-gray-700 rounded-full h-2">
-                              <motion.div
-                                initial={{ width: 0 }}
-                                animate={{ width: `${consistentMatch}%` }}
-                                transition={{ delay: index * 0.1 + 0.5, duration: 0.8 }}
-                                className="bg-gradient-to-r from-green-400 to-emerald-500 h-2 rounded-full"
-                              />
-                            </div>
-                            <p className="text-xs text-gray-500 mt-1">
-                              Based on your rating preferences, this song has a {consistentMatch}% likelihood you'll enjoy it. <span className="text-green-400 font-medium">Highly recommended!</span>
-                            </p>
-                          </>
-                        );
-                      })()}
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-gray-400">Match Score:</span>
+                        <span className="text-sm font-bold text-green-400">
+                          {track.matchPercentage}% Match
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-700 rounded-full h-2">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${track.matchPercentage}%` }}
+                          transition={{ delay: index * 0.1 + 0.5, duration: 0.8 }}
+                          className="bg-gradient-to-r from-green-400 to-emerald-500 h-2 rounded-full"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Based on your rating preferences, this song has a {track.matchPercentage}% likelihood you'll enjoy it. <span className="text-green-400 font-medium">Highly recommended!</span>
+                      </p>
                     </motion.div>
 
                     {/* Rating System for Recommendations */}
@@ -1820,7 +1818,7 @@ export default function MusicRecognitionApp() {
                       )}
                     </div>
                   </motion.div>
-                ))}
+                  ))}
               </div>
             </motion.div>
           )}
@@ -3475,6 +3473,7 @@ export default function MusicRecognitionApp() {
                     </motion.div>
                   </div>
                 </motion.div>
+                
               </div>
             </motion.div>
           </div>
