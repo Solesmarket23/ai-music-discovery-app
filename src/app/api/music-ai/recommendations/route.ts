@@ -538,8 +538,8 @@ function analyzeAudioProfile(tracks: any[], audioFeatures: any): any {
     const totalWeight = tracks.reduce((sum, t) => sum + (t.rating || 5) / 10, 0);
     
     // Normalize Bark Spectrum
-    if (barkSpectrumSum) {
-      profile.avgBarkSpectrum = barkSpectrumSum.map(val => val / totalWeight);
+    if (barkSpectrumSum && Array.isArray(barkSpectrumSum)) {
+      profile.avgBarkSpectrum = (barkSpectrumSum as number[]).map(val => val / totalWeight);
     }
     
     // Normalize emotional profile
