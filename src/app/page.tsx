@@ -4924,9 +4924,9 @@ export default function MusicRecognitionApp() {
       {isPlaying && (
         <motion.div
           drag="y"
-          dragConstraints={{ top: -(window.innerHeight - 100), bottom: window.innerHeight - 100 }} // Can move almost full screen height with 50px margins
+          dragConstraints={{ top: -800, bottom: 800 }} // Can move almost full screen height with 50px margins
           dragElastic={0.2}
-          dragMomentum={false}
+          dragMomentum={true}
           onDrag={(event, info) => {
             setBottomDebugBoxY(prev => prev + info.delta.y); // Use relative drag delta, clamped
           }}
