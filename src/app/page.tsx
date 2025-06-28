@@ -4924,13 +4924,13 @@ export default function MusicRecognitionApp() {
       {isPlaying && (
         <motion.div
           drag="y"
-          dragConstraints={{ top: -1000, bottom: 1000 }} // Can move almost full screen height with 50px margins
-          dragElastic={0.1}
+          dragConstraints={{ top: -(window.innerHeight - 100), bottom: window.innerHeight - 100 }} // Can move almost full screen height with 50px margins
+          dragElastic={0.2}
           dragMomentum={false}
           onDrag={(event, info) => {
-            setBottomDebugBoxY(prev => { const newY = prev + info.delta.y; const screenHeight = window.innerHeight; const maxUp = screenHeight - 166; const maxDown = 34; return Math.max(maxDown, Math.min(maxUp, newY)); }); // Use relative drag delta, clamped
+            setBottomDebugBoxY(prev => prev + info.delta.y); // Use relative drag delta, clamped
           }}
-          whileDrag={{ scale: 1.05, boxShadow: "0 10px 30px rgba(0,0,0,0.3)" }}
+          whileDrag={{ boxShadow: "0 10px 30px rgba(0,0,0,0.3)" }}
           className="fixed right-4 bg-black/80 backdrop-blur-sm text-white p-3 rounded-lg text-xs z-50 cursor-grab active:cursor-grabbing select-none"
           style={{ bottom: 16 + bottomDebugBoxY }}
         >
