@@ -102,6 +102,9 @@ export default function MusicRecognitionApp() {
 
   // AI Training Settings
   const [aiTrainingMode, setAiTrainingMode] = useState<'rating' | 'audio' | 'listening' | 'genre' | 'tempo' | 'hybrid'>('rating');
+  
+  // Reset Library Confirmation
+  const [showResetConfirmation, setShowResetConfirmation] = useState(false);
 
   // Advanced Settings State (30k UI Designer Ideas)
   const [settingsTheme, setSettingsTheme] = useState<'auto' | 'dark' | 'light'>('auto');
@@ -187,6 +190,56 @@ export default function MusicRecognitionApp() {
     } catch (error) {
       console.error('Failed to load training mode from localStorage:', error);
       return 'rating';
+    }
+  };
+
+  // Reset Music Library Function
+  const resetMusicLibrary = () => {
+    try {
+      // Clear all music library state
+      setMusicLibrary([]);
+      setCurrentTrack(null);
+      setIsPlaying(false);
+      setCurrentTime(0);
+      setDuration(0);
+      setSmoothCurrentTime(0);
+      setRecommendations([]);
+      setPlayHistory([]);
+      
+      // Reset AI insights
+      setAiInsights({
+        totalRatedSongs: 0,
+        patterns: [],
+        readyForRecommendations: false
+      });
+      
+      // Clear localStorage ratings
+      localStorage.removeItem('musicAppRatings');
+      
+      // Reset audio context and player
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+      
+      // Reset audio analysis
+      resetAudioAnalysis();
+      
+      // Show success message
+      setShowToast({ 
+        message: '🗑️ Music library cleared successfully!', 
+        show: true 
+      });
+      setTimeout(() => setShowToast(null), 3000);
+      
+      console.log('🗑️ Music library reset complete');
+    } catch (error) {
+      console.error('Failed to reset music library:', error);
+      setShowToast({ 
+        message: '❌ Failed to reset library', 
+        show: true 
+      });
+      setTimeout(() => setShowToast(null), 3000);
     }
   };
 
@@ -3126,6 +3179,18 @@ export default function MusicRecognitionApp() {
                   <span>Settings</span>
                 </motion.button>
                 
+                {musicLibrary.length > 0 && (
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setShowResetConfirmation(true)}
+                    className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-red-600/20 to-red-700/20 border border-red-600/30 rounded-full text-red-300 hover:text-red-200 transition-all duration-300"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    <span>Reset Library</span>
+                  </motion.button>
+                )}
+                
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -3366,6 +3431,42 @@ export default function MusicRecognitionApp() {
             </motion.div>
           )}
 
+          {/* Empty Library State */}
+          {musicLibrary.length === 0 && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="mx-8 mb-8 text-center"
+            >
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.5, type: "spring", damping: 20 }}
+                className="w-32 h-32 mx-auto mb-6 bg-gradient-to-r from-gray-600 to-gray-700 rounded-full flex items-center justify-center opacity-50"
+              >
+                <Music className="h-16 w-16 text-gray-400" />
+              </motion.div>
+              
+              <h3 className="text-3xl font-bold text-gray-300 mb-4">Your Library is Empty</h3>
+              <p className="text-gray-400 text-lg mb-8 max-w-md mx-auto">
+                Upload your favorite songs to get started with AI-powered music discovery and recommendations.
+              </p>
+              
+              <motion.button
+                whileHover={{ scale: 1.05, y: -2 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setCurrentView('upload')}
+                className="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white px-8 py-4 rounded-2xl font-semibold text-lg transition-all duration-300 shadow-lg hover:shadow-xl"
+              >
+                <div className="flex items-center space-x-2">
+                  <Upload className="h-5 w-5" />
+                  <span>Upload Your Music</span>
+                </div>
+              </motion.button>
+            </motion.div>
+          )}
+
           {/* Music Library */}
           {musicLibrary.length > 0 && (
             <motion.div 
@@ -3462,27 +3563,44 @@ export default function MusicRecognitionApp() {
       <AnimatePresence>
         {showToast?.show && (
           <motion.div
-            initial={{ opacity: 0, y: -50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -30, scale: 0.9 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed top-8 left-1/2 transform -translate-x-1/2 z-[60]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
+            onClick={() => setShowToast(null)}
           >
-            <div className="bg-gradient-to-r from-green-500/90 to-emerald-500/90 backdrop-blur-xl rounded-2xl px-6 py-3 border border-green-400/30 shadow-2xl shadow-green-500/25">
-              <div className="flex items-center space-x-3">
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.8, opacity: 0, y: -20 }}
+              transition={{ type: "spring", damping: 20 }}
+              className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-xl rounded-2xl border border-green-500/30 p-8 max-w-md w-full mx-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-center">
                 <motion.div
-                  animate={{ 
-                    scale: [1, 1.2, 1],
-                    rotate: [0, 180, 360]
-                  }}
-                  transition={{ duration: 0.6 }}
-                  className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.1 }}
+                  className="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full flex items-center justify-center"
                 >
-                  <span className="text-sm">✓</span>
+                  <motion.div
+                    animate={{ 
+                      scale: [1, 1.2, 1],
+                      rotate: [0, 180, 360]
+                    }}
+                    transition={{ duration: 0.6 }}
+                  >
+                    <span className="text-white text-2xl">✓</span>
+                  </motion.div>
                 </motion.div>
-                <span className="text-white font-medium text-sm">{showToast.message}</span>
+                
+                <h3 className="text-xl font-bold text-white mb-3">Success!</h3>
+                <p className="text-gray-300 leading-relaxed">
+                  {showToast.message}
+                </p>
               </div>
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -4834,6 +4952,66 @@ export default function MusicRecognitionApp() {
           <div>Avg Level: {(soundVisualization.reduce((a, b) => a + b, 0) / soundVisualization.length).toFixed(1)}%</div>
         </motion.div>
       )}
+
+      {/* Reset Library Confirmation Modal */}
+      <AnimatePresence>
+        {showResetConfirmation && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => setShowResetConfirmation(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              transition={{ type: "spring", damping: 20 }}
+              className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-xl rounded-2xl border border-red-500/30 p-8 max-w-md w-full mx-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-center">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.1 }}
+                  className="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-red-500 to-red-600 rounded-full flex items-center justify-center"
+                >
+                  <RotateCcw className="h-8 w-8 text-white" />
+                </motion.div>
+                
+                <h3 className="text-2xl font-bold text-white mb-3">Reset Music Library?</h3>
+                <p className="text-gray-300 mb-6 leading-relaxed">
+                  This will permanently delete all {musicLibrary.length} songs, ratings, and AI learning data. This action cannot be undone.
+                </p>
+                
+                <div className="flex space-x-3">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setShowResetConfirmation(false)}
+                    className="flex-1 px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition-all duration-300"
+                  >
+                    Cancel
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      resetMusicLibrary();
+                      setShowResetConfirmation(false);
+                    }}
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-lg font-semibold transition-all duration-300"
+                  >
+                    Reset Library
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Audio Element */}
       <audio
