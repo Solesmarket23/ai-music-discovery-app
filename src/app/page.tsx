@@ -4927,12 +4927,9 @@ export default function MusicRecognitionApp() {
           dragConstraints={{ top: -800, bottom: 800 }} // Can move almost full screen height with 50px margins
           dragElastic={0.2}
           dragMomentum={true}
-          onDrag={(event, info) => {
-            setBottomDebugBoxY(prev => prev + info.delta.y); // Use relative drag delta, clamped
-          }}
           whileDrag={{ boxShadow: "0 10px 30px rgba(0,0,0,0.3)" }}
           className="fixed right-4 bg-black/80 backdrop-blur-sm text-white p-3 rounded-lg text-xs z-50 cursor-grab active:cursor-grabbing select-none"
-          style={{ bottom: 16 + bottomDebugBoxY }}
+          style={{ bottom: 16 }}
         >
           <div className="flex items-center justify-between mb-2">
             <span className="font-semibold text-green-400">Audio Analysis</span>
