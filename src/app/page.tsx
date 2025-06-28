@@ -385,6 +385,26 @@ export default function MusicRecognitionApp() {
     URL.revokeObjectURL(url);
   };
 
+  // Helper function to get audio duration
+  const getAudioDuration = (file: File): Promise<number> => {
+    return new Promise((resolve) => {
+      const audio = new Audio();
+      const url = URL.createObjectURL(file);
+      
+      audio.addEventListener('loadedmetadata', () => {
+        URL.revokeObjectURL(url);
+        resolve(audio.duration);
+      });
+      
+      audio.addEventListener('error', () => {
+        URL.revokeObjectURL(url);
+        resolve(0); // Return 0 if can't load duration
+      });
+      
+      audio.src = url;
+    });
+  };
+
   // Handle file uploads
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -395,12 +415,15 @@ export default function MusicRecognitionApp() {
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       if (file.type.includes('audio')) {
+        // Get actual duration from audio file
+        const duration = await getAudioDuration(file);
+        
         const track: MusicTrack = {
           id: `track-${Date.now()}-${i}`,
           name: file.name.replace(/\.(mp3|wav|m4a)$/i, ''),
           file,
           url: URL.createObjectURL(file),
-          duration: 0,
+          duration: duration,
         };
         newTracks.push(track);
       }
@@ -1727,13 +1750,7 @@ export default function MusicRecognitionApp() {
 
                     {/* Track Info */}
                     <h4 className="font-semibold text-white mb-2 truncate">{track.name}</h4>
-                    <p className="text-sm text-gray-400 mb-3">Duration: {track.duration && track.duration > 0 ? formatTime(track.duration) : (() => {
-                      // Generate consistent duration based on track ID
-                      const trackNum = parseInt(track.id.slice(-4), 36);
-                      const minutes = 2 + (trackNum % 4); // 2-5 minutes
-                      const seconds = 10 + (trackNum % 50); // 10-59 seconds
-                      return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-                    })()}</p>
+                    <p className="text-sm text-gray-400 mb-3">Duration: {track.duration && track.duration > 0 ? formatTime(track.duration) : 'Loading...'}</p>
                     
                     {/* Match Score */}
                     <motion.div
