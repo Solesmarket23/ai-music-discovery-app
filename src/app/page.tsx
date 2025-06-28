@@ -2180,6 +2180,17 @@ export default function MusicRecognitionApp() {
       const ratedTracks = musicLibrary.filter(track => track.rating);
       const unratedTracks = musicLibrary.filter(track => !track.rating);
       
+      // Check if there are any unrated tracks to recommend
+      if (unratedTracks.length === 0) {
+        setIsAnalyzing(false);
+        setShowToast({ 
+          message: `🎵 All ${musicLibrary.length} songs have been rated! Upload more songs to get AI recommendations.`, 
+          show: true 
+        });
+        setTimeout(() => setShowToast(null), 4000);
+        return;
+      }
+      
       // Debug: Check the actual state of musicLibrary
       console.log('🔍 DEBUG: Current musicLibrary state:');
       console.log(`  Total tracks: ${musicLibrary.length}`);
@@ -2301,11 +2312,18 @@ export default function MusicRecognitionApp() {
         setRecommendations(recommendedTracks);
         console.log(`🎯 Generated ${recommendedTracks.length} AI recommendations with advanced audio analysis!`);
         
-        // Show success feedback
-        setShowToast({ 
-          message: `🚀 AI found ${recommendedTracks.length} perfect matches using advanced audio analysis!`, 
-          show: true 
-        });
+        // Show appropriate feedback based on results
+        if (recommendedTracks.length === 0) {
+          setShowToast({ 
+            message: `🎵 All songs have already been rated! Upload more songs to get AI recommendations.`, 
+            show: true 
+          });
+        } else {
+          setShowToast({ 
+            message: `🚀 AI found ${recommendedTracks.length} perfect matches using advanced audio analysis!`, 
+            show: true 
+          });
+        }
         setTimeout(() => setShowToast(null), 4000);
       } else {
         // Fallback to simple recommendation
