@@ -24,7 +24,50 @@ interface UserProfile {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    console.log('🔍 API Received Body:', body);
+    console.log('🔍 API Received Body Keys:', Object.keys(body));
+    console.log('🔍 Rated Tracks Count:', body.ratedTracks?.length);
+    console.log('🔍 Unrated Tracks Count:', body.unratedTracks?.length);
+    
+    // Enhanced Debug: Check if tracks have audio features
+    if (body.ratedTracks) {
+      const tracksWithFeatures = body.ratedTracks.filter((t: any) => t.audioFeatures && Object.keys(t.audioFeatures).length > 0);
+      const advancedTracksCount = body.ratedTracks.filter((t: any) => 
+        t.audioFeatures && (
+          (t.audioFeatures.barkSpectrum && t.audioFeatures.barkSpectrum.length > 0) || 
+          t.audioFeatures.emotionalTension !== undefined ||
+          (t.audioFeatures.harmonicContent && t.audioFeatures.harmonicContent.complexity > 0)
+        )
+      ).length;
+      
+      console.log('🔍 Rated tracks with audioFeatures:', tracksWithFeatures.length);
+      console.log('🔍 Rated tracks with ADVANCED features:', advancedTracksCount);
+      
+      if (tracksWithFeatures.length > 0) {
+        const sample = tracksWithFeatures[0].audioFeatures;
+        console.log('🔍 Sample audioFeatures keys:', Object.keys(sample));
+        console.log('🔍 Sample features quality:', {
+          hasBarkSpectrum: !!sample.barkSpectrum,
+          barkSpectrumLength: sample.barkSpectrum?.length || 0,
+          hasEmotionalProfile: sample.emotionalTension !== undefined,
+          hasHarmonicContent: !!sample.harmonicContent,
+          hasAdvancedFeatures: !!((sample.barkSpectrum && sample.barkSpectrum.length > 0) || sample.emotionalTension !== undefined || (sample.harmonicContent && sample.harmonicContent.complexity > 0))
+        });
+      }
+    }
+    
+    if (body.unratedTracks) {
+      const unratedWithFeatures = body.unratedTracks.filter((t: any) => t.audioFeatures && Object.keys(t.audioFeatures).length > 0);
+      const unratedAdvancedCount = body.unratedTracks.filter((t: any) => 
+        t.audioFeatures && (
+          (t.audioFeatures.barkSpectrum && t.audioFeatures.barkSpectrum.length > 0) || 
+          t.audioFeatures.emotionalTension !== undefined ||
+          (t.audioFeatures.harmonicContent && t.audioFeatures.harmonicContent.complexity > 0)
+        )
+      ).length;
+      
+      console.log('🔍 Unrated tracks with audioFeatures:', unratedWithFeatures.length);
+      console.log('🔍 Unrated tracks with ADVANCED features:', unratedAdvancedCount);
+    }
     
     const { ratedTracks, unratedTracks, trainingMode = 'rating', behaviorData, audioFeatures } = body;
 
@@ -45,10 +88,29 @@ export async function POST(req: NextRequest) {
 
     console.log(`🤖 AI Recommendation Engine - Mode: ${trainingMode}`);
     console.log(`📊 Data: ${ratedTracks.length} rated, ${unratedTracks.length} unrated tracks`);
+    console.log(`🔍 Processing recommendations for ${unratedTracks.length} tracks`);
 
     // === ADVANCED PERCEPTUAL AI RECOMMENDATION SYSTEM ===
     // Build enhanced user profile with perceptual audio features
     const userProfile = buildEnhancedUserProfile(ratedTracks);
+    
+    // Check feature availability for better debugging
+    const profileHasAdvanced = !!(userProfile.avgBarkSpectrum || userProfile.avgEmotionalProfile.tension > 0);
+    console.log(`🔍 UserProfile bark spectrum available: ${!!userProfile.avgBarkSpectrum}`);
+    console.log(`🔍 UserProfile harmonic complexity: ${userProfile.avgHarmonicComplexity}`);
+    
+    // Count tracks with and without features for processing  
+    const tracksWithFeatures = unratedTracks.filter(t => t.audioFeatures && (
+      (t.audioFeatures.barkSpectrum && t.audioFeatures.barkSpectrum.length > 0) || 
+      t.audioFeatures.emotionalTension !== undefined ||
+      (t.audioFeatures.harmonicContent && t.audioFeatures.harmonicContent.complexity > 0)
+    ));
+    const tracksWithoutFeatures = unratedTracks.filter(t => !t.audioFeatures || !(
+      (t.audioFeatures.barkSpectrum && t.audioFeatures.barkSpectrum.length > 0) || 
+      t.audioFeatures.emotionalTension !== undefined ||
+      (t.audioFeatures.harmonicContent && t.audioFeatures.harmonicContent.complexity > 0)
+    ));
+    console.log(`🔍 Final counts: tracks with features: ${tracksWithFeatures.length} tracks without features: ${tracksWithoutFeatures.length}`);
     
     // Generate recommendations using advanced perceptual analysis
     const recommendations = generateAdvancedRecommendations(userProfile, unratedTracks, trainingMode);
@@ -302,7 +364,7 @@ function calculateRatingScore(track: any, preferredArtists: any, avoidedArtists:
 }
 
 function analyzeAudioProfile(tracks: any[], audioFeatures: any): any {
-  // Enhanced audio analysis with more sophisticated pattern recognition
+  // Enhanced audio analysis with actual audio features
   const profile = {
     preferredGenres: {} as Record<string, number>,
     energyLevel: 0,
@@ -310,14 +372,99 @@ function analyzeAudioProfile(tracks: any[], audioFeatures: any): any {
     vocalStyle: 0,
     moodProfile: {} as Record<string, number>,
     tempoPreference: 0,
-    yearPreference: {} as Record<string, number>
+    yearPreference: {} as Record<string, number>,
+    // === NEW: ACTUAL AUDIO FEATURES ===
+    avgBarkSpectrum: null as number[] | null,
+    avgEmotionalProfile: { tension: 0, valence: 0, arousal: 0 },
+    avgHarmonicComplexity: 0,
+    avgBrightness: 0,
+    avgWarmth: 0,
+    avgTempo: 0,
+    avgSpectralCentroid: 0,
+    avgEnergyDensity: 0,
+    avgEnergyFlow: 0,
+    keyPreferences: {} as Record<string, number>,
+    hasAdvancedFeatures: false
   };
   
-  // Advanced audio analysis based on track names and patterns
+  let featuresCount = 0;
+  let barkSpectrumSum: number[] | null = null;
+  
+  // Process tracks to build audio profile from actual features
   tracks.forEach(track => {
-    const name = track.name.toLowerCase();
     const rating = track.rating || 5;
     const weight = rating / 10; // Weight by how much user liked it
+    
+    // === USE ACTUAL AUDIO FEATURES ===
+    if (track.audioFeatures && Object.keys(track.audioFeatures).length > 0) {
+      profile.hasAdvancedFeatures = true;
+      featuresCount++;
+      
+      const features = track.audioFeatures;
+      
+      // Aggregate Bark Spectrum
+      if (features.barkSpectrum && Array.isArray(features.barkSpectrum)) {
+        if (!barkSpectrumSum) {
+          barkSpectrumSum = new Array(features.barkSpectrum.length).fill(0);
+        }
+        features.barkSpectrum.forEach((value: number, i: number) => {
+          if (barkSpectrumSum && i < barkSpectrumSum.length) {
+            barkSpectrumSum[i] += value * weight;
+          }
+        });
+      }
+      
+      // Aggregate emotional features
+      if (features.emotionalTension !== undefined) {
+        profile.avgEmotionalProfile.tension += features.emotionalTension * weight;
+      }
+      if (features.emotionalValence !== undefined) {
+        profile.avgEmotionalProfile.valence += features.emotionalValence * weight;
+      }
+      if (features.emotionalArousal !== undefined) {
+        profile.avgEmotionalProfile.arousal += features.emotionalArousal * weight;
+      }
+      
+      // Aggregate harmonic complexity
+      if (features.harmonicContent?.complexity !== undefined) {
+        profile.avgHarmonicComplexity += features.harmonicContent.complexity * weight;
+      }
+      
+      // Aggregate timbral features
+      if (features.brightness !== undefined) {
+        profile.avgBrightness += features.brightness * weight;
+      }
+      if (features.warmth !== undefined) {
+        profile.avgWarmth += features.warmth * weight;
+      }
+      
+      // Aggregate tempo
+      if (features.tempo !== undefined) {
+        profile.avgTempo += features.tempo * weight;
+      }
+      
+      // Aggregate spectral features
+      if (features.spectralCentroid !== undefined) {
+        profile.avgSpectralCentroid += features.spectralCentroid * weight;
+      }
+      
+      // Aggregate energy features
+      if (features.energyDensity !== undefined) {
+        profile.avgEnergyDensity += features.energyDensity * weight;
+      }
+      if (features.energyFlow !== undefined) {
+        profile.avgEnergyFlow += features.energyFlow * weight;
+      }
+      
+      // Aggregate key preferences
+      if (features.keySignature) {
+        profile.keyPreferences[features.keySignature] = 
+          (profile.keyPreferences[features.keySignature] || 0) + weight;
+      }
+    }
+    
+    // === FALLBACK: ENHANCED PATTERN ANALYSIS FOR TRACKS WITHOUT FEATURES ===
+    const name = track.name.toLowerCase();
     
     // Enhanced Genre Detection
     const genrePatterns = {
@@ -386,12 +533,158 @@ function analyzeAudioProfile(tracks: any[], audioFeatures: any): any {
     }
   });
   
+  // === NORMALIZE AVERAGED FEATURES ===
+  if (featuresCount > 0) {
+    const totalWeight = tracks.reduce((sum, t) => sum + (t.rating || 5) / 10, 0);
+    
+    // Normalize Bark Spectrum
+    if (barkSpectrumSum) {
+      profile.avgBarkSpectrum = barkSpectrumSum.map(val => val / totalWeight);
+    }
+    
+    // Normalize emotional profile
+    profile.avgEmotionalProfile.tension /= totalWeight;
+    profile.avgEmotionalProfile.valence /= totalWeight;
+    profile.avgEmotionalProfile.arousal /= totalWeight;
+    
+    // Normalize other features
+    profile.avgHarmonicComplexity /= totalWeight;
+    profile.avgBrightness /= totalWeight;
+    profile.avgWarmth /= totalWeight;
+    profile.avgTempo /= totalWeight;
+    profile.avgSpectralCentroid /= totalWeight;
+    profile.avgEnergyDensity /= totalWeight;
+    profile.avgEnergyFlow /= totalWeight;
+  }
+  
+  console.log(`🧠 Audio profile built:`, {
+    hasAdvancedFeatures: profile.hasAdvancedFeatures,
+    tracksWithFeatures: featuresCount,
+    avgTempo: profile.avgTempo?.toFixed(1),
+    avgEmotionalTension: profile.avgEmotionalProfile.tension?.toFixed(2),
+    avgBrightness: profile.avgBrightness?.toFixed(2),
+    barkSpectrumLength: profile.avgBarkSpectrum?.length || 0,
+    topKeys: Object.keys(profile.keyPreferences).slice(0, 3)
+  });
+  
   return profile;
 }
 
 function calculateAudioSimilarity(track: any, audioProfile: any, audioFeatures: any): number {
   let score = 5; // Base score
   const name = track.name.toLowerCase();
+  
+  // === ADVANCED AUDIO FEATURE MATCHING ===
+  if (audioProfile.hasAdvancedFeatures && track.audioFeatures && Object.keys(track.audioFeatures).length > 0) {
+    console.log(`🔬 Using advanced audio features for: ${track.name}`);
+    
+    let featureScore = 0;
+    let featureCount = 0;
+    
+    // 1. BARK SPECTRUM SIMILARITY (Perceptual frequency analysis)
+    if (audioProfile.avgBarkSpectrum && track.audioFeatures.barkSpectrum) {
+      const similarity = calculateBarkSpectrumSimilarity(
+        audioProfile.avgBarkSpectrum, 
+        track.audioFeatures.barkSpectrum
+      );
+      featureScore += similarity * 8; // High weight for perceptual similarity
+      featureCount++;
+      console.log(`  📊 Bark spectrum similarity: ${similarity.toFixed(3)}`);
+    }
+    
+    // 2. EMOTIONAL PROFILE MATCHING
+    if (audioProfile.avgEmotionalProfile && track.audioFeatures.emotionalTension !== undefined) {
+      const emotionalSimilarity = calculateEmotionalSimilarity(
+        audioProfile.avgEmotionalProfile,
+        {
+          tension: track.audioFeatures.emotionalTension || 0,
+          valence: track.audioFeatures.emotionalValence || 0,
+          arousal: track.audioFeatures.emotionalArousal || 0
+        }
+      );
+      featureScore += emotionalSimilarity * 6; // High weight for emotional matching
+      featureCount++;
+      console.log(`  😄 Emotional similarity: ${emotionalSimilarity.toFixed(3)}`);
+    }
+    
+    // 3. HARMONIC COMPLEXITY MATCHING
+    if (audioProfile.avgHarmonicComplexity && track.audioFeatures.harmonicContent?.complexity !== undefined) {
+      const complexitySimilarity = 1 - Math.abs(
+        audioProfile.avgHarmonicComplexity - track.audioFeatures.harmonicContent.complexity
+      ) / 10; // Normalize to 0-1
+      featureScore += Math.max(0, complexitySimilarity) * 4;
+      featureCount++;
+      console.log(`  🎵 Harmonic complexity similarity: ${complexitySimilarity.toFixed(3)}`);
+    }
+    
+    // 4. TIMBRAL TEXTURE MATCHING
+    if (audioProfile.avgBrightness && track.audioFeatures.brightness !== undefined) {
+      const brightnessSimilarity = 1 - Math.abs(
+        audioProfile.avgBrightness - track.audioFeatures.brightness
+      );
+      featureScore += Math.max(0, brightnessSimilarity) * 3;
+      featureCount++;
+    }
+    
+    if (audioProfile.avgWarmth && track.audioFeatures.warmth !== undefined) {
+      const warmthSimilarity = 1 - Math.abs(
+        audioProfile.avgWarmth - track.audioFeatures.warmth
+      );
+      featureScore += Math.max(0, warmthSimilarity) * 3;
+      featureCount++;
+    }
+    
+    // 5. TEMPO MATCHING
+    if (audioProfile.avgTempo && track.audioFeatures.tempo) {
+      const tempoDiff = Math.abs(audioProfile.avgTempo - track.audioFeatures.tempo);
+      const tempoSimilarity = Math.max(0, 1 - tempoDiff / 100); // Normalize by 100 BPM range
+      featureScore += tempoSimilarity * 4;
+      featureCount++;
+      console.log(`  🥁 Tempo similarity: ${tempoSimilarity.toFixed(3)} (${track.audioFeatures.tempo} vs ${audioProfile.avgTempo.toFixed(1)})`);
+    }
+    
+    // 6. ENERGY PROFILE MATCHING
+    if (audioProfile.avgEnergyDensity && track.audioFeatures.energyDensity !== undefined) {
+      const energySimilarity = 1 - Math.abs(
+        audioProfile.avgEnergyDensity - track.audioFeatures.energyDensity
+      );
+      featureScore += Math.max(0, energySimilarity) * 3;
+      featureCount++;
+    }
+    
+    // 7. KEY SIGNATURE MATCHING
+    if (audioProfile.keyPreferences && track.audioFeatures.keySignature) {
+      const keyWeight = audioProfile.keyPreferences[track.audioFeatures.keySignature] || 0;
+      featureScore += keyWeight * 2;
+      featureCount++;
+      console.log(`  🎹 Key match: ${track.audioFeatures.keySignature} (weight: ${keyWeight.toFixed(2)})`);
+    }
+    
+    // 8. SPECTRAL CENTROID MATCHING
+    if (audioProfile.avgSpectralCentroid && track.audioFeatures.spectralCentroid) {
+      const spectralDiff = Math.abs(audioProfile.avgSpectralCentroid - track.audioFeatures.spectralCentroid);
+      const spectralSimilarity = Math.max(0, 1 - spectralDiff / 5000); // Normalize by 5kHz range
+      featureScore += spectralSimilarity * 2;
+      featureCount++;
+    }
+    
+    // Average the feature scores and add to base score
+    if (featureCount > 0) {
+      const avgFeatureScore = featureScore / featureCount;
+      score += avgFeatureScore;
+      console.log(`  ✅ Advanced audio match score: ${avgFeatureScore.toFixed(2)} (${featureCount} features)`);
+      
+      // Bonus for having many matching features
+      if (featureCount >= 5) {
+        score += 2; // Comprehensive match bonus
+      }
+      
+      return Math.max(0, score);
+    }
+  }
+  
+  // === FALLBACK: ENHANCED PATTERN MATCHING ===
+  console.log(`📝 Using pattern matching for: ${track.name}`);
   
   // Enhanced genre matching
   Object.entries(audioProfile.preferredGenres).forEach(([genre, weight]: [string, any]) => {
@@ -490,6 +783,37 @@ function calculateAudioSimilarity(track: any, audioProfile: any, audioFeatures: 
   }
   
   return Math.max(0, score);
+}
+
+// === NEW HELPER FUNCTIONS FOR ADVANCED AUDIO MATCHING ===
+
+function calculateBarkSpectrumSimilarity(profile: number[], track: number[]): number {
+  if (!profile || !track || profile.length !== track.length) return 0;
+  
+  let similarity = 0;
+  let totalWeight = 0;
+  
+  for (let i = 0; i < Math.min(profile.length, track.length); i++) {
+    const weight = 1 / (1 + i * 0.1); // Weight lower frequencies more heavily
+    const diff = Math.abs(profile[i] - track[i]);
+    const maxVal = Math.max(profile[i], track[i], 0.1); // Avoid division by zero
+    similarity += (1 - diff / maxVal) * weight;
+    totalWeight += weight;
+  }
+  
+  return totalWeight > 0 ? similarity / totalWeight : 0;
+}
+
+function calculateEmotionalSimilarity(
+  profile: { tension: number; valence: number; arousal: number },
+  track: { tension: number; valence: number; arousal: number }
+): number {
+  const tensionSim = 1 - Math.abs(profile.tension - track.tension);
+  const valenceSim = 1 - Math.abs(profile.valence - track.valence);
+  const arousalSim = 1 - Math.abs(profile.arousal - track.arousal);
+  
+  // Weight valence and arousal more heavily as they're more perceptually important
+  return (tensionSim * 0.3 + valenceSim * 0.4 + arousalSim * 0.3);
 }
 
 function extractBehaviorPatterns(tracks: any[]): any {
@@ -703,6 +1027,13 @@ function getMatchExplanation(track: any, score: number, percentage: number, mode
 function generateAdvancedRecommendations(userProfile: UserProfile, allTracks: any[], mode: string): any[] {
   const recommendations = [];
   
+  console.log('🔍 Processing recommendations for', allTracks.length, 'tracks');
+  console.log('🔍 UserProfile bark spectrum available:', !!userProfile.avgBarkSpectrum);
+  console.log('🔍 UserProfile harmonic complexity:', userProfile.avgHarmonicComplexity);
+  
+  let tracksWithFeatures = 0;
+  let tracksWithoutFeatures = 0;
+  
   for (const track of allTracks) {
     if (userProfile.ratedTracks.has(track.id)) continue;
     
@@ -711,7 +1042,9 @@ function generateAdvancedRecommendations(userProfile: UserProfile, allTracks: an
     
     // === PERCEPTUAL AUDIO MATCHING (30K SOUND ENGINEERS APPROACH) ===
     
-    if (track.audioFeatures) {
+    if (track.audioFeatures && Object.keys(track.audioFeatures).length > 0) {
+      tracksWithFeatures++;
+      console.log('🔍 Track with features:', track.name.substring(0, 50), 'Feature keys:', Object.keys(track.audioFeatures));
       const features = track.audioFeatures;
       
       // 1. BARK SCALE PERCEPTUAL MATCHING
@@ -820,6 +1153,7 @@ function generateAdvancedRecommendations(userProfile: UserProfile, allTracks: an
       }
     } else {
       // === FALLBACK FOR TRACKS WITHOUT AUDIO FEATURES ===
+      tracksWithoutFeatures++;
       // Give basic score to ensure tracks without analysis still get considered
       score += 10; // Base score for non-analyzed tracks
       details.push('Basic matching (no audio analysis available)');
@@ -867,6 +1201,8 @@ function generateAdvancedRecommendations(userProfile: UserProfile, allTracks: an
       matchingReason: details.slice(0, 3).join(', ') || 'General preference match'
     });
   }
+  
+  console.log('🔍 Final counts: tracks with features:', tracksWithFeatures, 'tracks without features:', tracksWithoutFeatures);
   
   return recommendations.sort((a, b) => b.score - a.score);
 }
