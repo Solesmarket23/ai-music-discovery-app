@@ -2643,24 +2643,39 @@ export default function MusicRecognitionApp() {
               AI Music
             </motion.span>
             <motion.span 
-              className="inline-block py-2"
+              className="inline-block py-2 relative"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.9, duration: 0.6 }}
               style={{
-                background: "linear-gradient(135deg, #fbbf24 0%, #f97316 50%, #ef4444 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
-                color: "#f97316", // Fallback color for better visibility
                 paddingTop: "0.5rem",
                 paddingBottom: "0.5rem",
-                overflow: "visible",
+                minHeight: "1.2em",
                 display: "inline-block",
-                minHeight: "1.2em", // Ensure proper height for descenders
+                position: "relative",
+                zIndex: 10,
               }}
             >
-              Discovery
+              <span
+                style={{
+                  background: "linear-gradient(135deg, #fbbf24 0%, #f97316 50%, #ef4444 100%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent", 
+                  backgroundClip: "text",
+                  color: "transparent",
+                  fontSize: "inherit",
+                  fontWeight: "inherit",
+                  lineHeight: "inherit",
+                  letterSpacing: "inherit",
+                  display: "inline",
+                  padding: 0,
+                  margin: 0,
+                  border: "none",
+                  backgroundAttachment: "local",
+                }}
+              >
+                Discovery
+              </span>
             </motion.span>
           </motion.h1>
           
