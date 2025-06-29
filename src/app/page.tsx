@@ -2612,19 +2612,21 @@ export default function MusicRecognitionApp() {
           
           {/* Revolutionary Headline Typography */}
           <motion.h1 
-            className="text-[4rem] md:text-[5.5rem] lg:text-[6.5rem] font-black mb-6 leading-[0.85] tracking-[-0.02em]"
+            className="text-[4rem] md:text-[5.5rem] lg:text-[6.5rem] font-black mb-8 leading-[0.95] tracking-[-0.02em] px-4"
             style={{
               background: "linear-gradient(135deg, #ec4899 0%, #a855f7 25%, #3b82f6 50%, #06b6d4 75%, #10b981 100%)",
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
               backgroundClip: "text",
               textShadow: "0 0 40px rgba(236, 72, 153, 0.3)",
+              overflow: "visible",
             }}
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6, duration: 0.8 }}
           >
             <motion.span
+              className="block pb-2"
               animate={{
                 backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"],
               }}
@@ -2635,13 +2637,13 @@ export default function MusicRecognitionApp() {
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
                 backgroundClip: "text",
+                color: "#ec4899", // Fallback color
               }}
             >
               AI Music
             </motion.span>
-            <br />
             <motion.span 
-              className="inline-block"
+              className="inline-block py-2"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.9, duration: 0.6 }}
@@ -2650,6 +2652,12 @@ export default function MusicRecognitionApp() {
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
                 backgroundClip: "text",
+                color: "#f97316", // Fallback color for better visibility
+                paddingTop: "0.5rem",
+                paddingBottom: "0.5rem",
+                overflow: "visible",
+                display: "inline-block",
+                minHeight: "1.2em", // Ensure proper height for descenders
               }}
             >
               Discovery
