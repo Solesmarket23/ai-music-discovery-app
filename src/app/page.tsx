@@ -2694,7 +2694,7 @@ export default function MusicRecognitionApp() {
                 }}
                 transition={{ duration: 4, repeat: Infinity }}
               >
-                Unleash the power of AI to discover your{" "}
+                Unleash the power of AI to discover your {" "}
               </motion.span>
               <motion.span
                 className="bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent font-medium"
