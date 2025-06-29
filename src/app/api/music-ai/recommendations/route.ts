@@ -28,6 +28,16 @@ export async function POST(req: NextRequest) {
     console.log('🔍 Rated Tracks Count:', body.ratedTracks?.length);
     console.log('🔍 Unrated Tracks Count:', body.unratedTracks?.length);
     
+    // Debug: Check rated tracks
+    if (body.ratedTracks && body.ratedTracks.length > 0) {
+      console.log('🔍 MAIN DEBUG - First few rated tracks:', body.ratedTracks.slice(0, 3).map((t: any) => ({
+        name: t.name?.substring(0, 30),
+        rating: t.rating,
+        hasRating: !!t.rating,
+        ratingType: typeof t.rating
+      })));
+    }
+    
     // Enhanced Debug: Check if tracks have audio features
     if (body.ratedTracks) {
       const tracksWithFeatures = body.ratedTracks.filter((t: any) => t.audioFeatures && Object.keys(t.audioFeatures).length > 0);
@@ -70,6 +80,19 @@ export async function POST(req: NextRequest) {
     }
     
     const { ratedTracks, unratedTracks, trainingMode = 'rating', behaviorData, audioFeatures } = body;
+
+    // DEBUG: Log what rated tracks are being sent to API
+    console.log('🔍 API REQUEST DEBUG - Rated tracks received:', ratedTracks?.length || 0);
+    if (ratedTracks && ratedTracks.length > 0) {
+      console.log('🔍 API REQUEST DEBUG - First 5 rated tracks:', ratedTracks.slice(0, 5).map((t: any) => ({
+        name: t.name?.substring(0, 30) || 'unnamed',
+        rating: t.rating,
+        hasRating: t.rating !== undefined,
+        ratingType: typeof t.rating
+      })));
+    } else {
+      console.log('🔍 API REQUEST DEBUG - No rated tracks in request!');
+    }
 
     // Validation
     if (!Array.isArray(ratedTracks) || !Array.isArray(unratedTracks)) {
@@ -127,14 +150,20 @@ export async function POST(req: NextRequest) {
       }))
     });
 
+    // Dynamic recommendation count based on library size
+    const librarySize = unratedTracks.length;
+    const recommendationCount = librarySize >= 100 ? 15 : 
+                               librarySize >= 50 ? 10 : 
+                               librarySize >= 20 ? 8 : 5;
+
     return NextResponse.json({
       success: true,
-      recommendations: recommendations.slice(0, 5).map(rec => ({
+      recommendations: recommendations.slice(0, recommendationCount).map(rec => ({
         ...rec,
         matchPercentage: calculateMatchPercentage(rec.score, trainingMode, ratedTracks.length)
       })),
       mode: trainingMode,
-      reasoning: `Generated using ${trainingMode} analysis`,
+      reasoning: `Generated using ${trainingMode} analysis from ${librarySize} unrated tracks`,
       confidence: getConfidenceScore(trainingMode, ratedTracks.length, behaviorData)
     });
 
@@ -567,7 +596,7 @@ function analyzeAudioProfile(tracks: any[], audioFeatures: any): any {
     topKeys: Object.keys(profile.keyPreferences).slice(0, 3)
   });
   
-  return profile;
+    return profile;
 }
 
 function calculateAudioSimilarity(track: any, audioProfile: any, audioFeatures: any): number {
@@ -1228,9 +1257,40 @@ function buildEnhancedUserProfile(ratedTracks: any[]): UserProfile {
     chordProgressionFamiliarity: {}
   };
   
-  const highRatedTracks = ratedTracks.filter(track => track.rating >= 7);
+  // Debug: Log all rated tracks and their ratings
+  console.log('🔍 PROFILE DEBUG - Total rated tracks:', ratedTracks.length);
+  console.log('🔍 PROFILE DEBUG - Rated songs breakdown:', ratedTracks.map(t => ({ 
+    name: t.name.substring(0, 30), 
+    rating: t.rating, 
+    hasAudioFeatures: !!t.audioFeatures,
+    audioFeatureKeys: t.audioFeatures ? Object.keys(t.audioFeatures).length : 0
+  })));
+
+  // 🎯 NEW APPROACH: Use ALL rated tracks (1-10) with different weights
+  // This gives the AI much more data to learn from
+  const ratingBreakdown = {
+    disliked: ratedTracks.filter(track => track.rating >= 1 && track.rating <= 3),  // What to avoid
+    neutral: ratedTracks.filter(track => track.rating >= 4 && track.rating <= 6),   // Mixed signals
+    liked: ratedTracks.filter(track => track.rating >= 7 && track.rating <= 10)     // What to recommend
+  };
   
-  if (highRatedTracks.length === 0) return profile;
+  console.log('🔍 PROFILE DEBUG - Rating breakdown:');
+  console.log(`  Disliked (1-3): ${ratingBreakdown.disliked.length} songs`);
+  console.log(`  Neutral (4-6): ${ratingBreakdown.neutral.length} songs`);
+  console.log(`  Liked (7-10): ${ratingBreakdown.liked.length} songs`);
+  
+  if (ratedTracks.length === 0) {
+    console.log('🔍 PROFILE DEBUG - No rated songs found, returning empty profile');
+    return profile;
+  }
+  
+  // Use ALL rated tracks to build a comprehensive profile
+  console.log('🔍 PROFILE DEBUG - Using ALL rated songs for comprehensive profile building');
+  return buildUserProfileFromTracks(ratedTracks, profile);
+}
+
+// Helper function to build profile from a set of tracks
+function buildUserProfileFromTracks(tracks: any[], profile: UserProfile): UserProfile {
   
   // === PERCEPTUAL FEATURE AVERAGING ===
   
@@ -1245,49 +1305,111 @@ function buildEnhancedUserProfile(ratedTracks: any[]): UserProfile {
   
   let validFeatureCount = 0;
   
-  highRatedTracks.forEach(track => {
+  tracks.forEach(track => {
     profile.ratedTracks.add(track.id);
-    const weight = track.rating / 10;
     
-    // Perceptual feature accumulation
-    if (track.audioFeatures) {
-      const features = track.audioFeatures;
+    // 🎯 IMPROVED WEIGHTING SYSTEM
+    // Use different weighting strategies based on rating
+    let weight;
+    if (track.rating >= 7) {
+      // High ratings (7-10): Strong positive weight
+      weight = (track.rating - 6) / 4; // Maps 7-10 to 0.25-1.0
+    } else if (track.rating >= 4) {
+      // Medium ratings (4-6): Neutral weight (learning but not strong preference)
+      weight = (track.rating - 3) / 10; // Maps 4-6 to 0.1-0.3
+    } else {
+      // Low ratings (1-3): Negative weight (what to avoid)
+      weight = -(4 - track.rating) / 10; // Maps 1-3 to -0.3 to -0.1
+    }
+    
+    console.log(`🔍 Track with features: ${track.name} Feature keys: [${Object.keys(track.audioFeatures || track).filter(k => k.includes('spectral') || k.includes('bark') || k.includes('emotion') || k.includes('harmony') || k.includes('tempo') || k.includes('energy') || k.includes('brightness') || k.includes('warmth') || k.includes('roughness') || k.includes('compression') || k.includes('dynamic') || k.includes('perceived') || k.includes('key')).map(k => `'${k}'`).join(', ')}]`);
+    
+    // 🔧 CRITICAL FIX: Handle both audioFeatures object AND direct properties
+    // Check if features are in audioFeatures object OR directly on track
+    const features = track.audioFeatures || track;
+    
+    // Only count as valid if we actually have meaningful audio features
+    const hasAudioFeatures = features.barkSpectrum || 
+                             features.emotionalTension !== undefined || 
+                             features.spectralCentroid || 
+                             features.harmonicContent;
+    
+    if (hasAudioFeatures) {
       validFeatureCount++;
       
+      // Debug the actual feature values
+      console.log(`🔍 Feature values for ${track.name.substring(0, 20)}:`, {
+        barkSpectrum: features.barkSpectrum?.length || 0,
+        emotionalTension: features.emotionalTension,
+        harmonicComplexity: features.harmonicContent?.complexity,
+        spectralCentroid: features.spectralCentroid,
+        tempo: features.tempo
+      });
+      
       // Bark spectrum averaging
-      if (features.barkSpectrum) {
+      if (features.barkSpectrum && Array.isArray(features.barkSpectrum)) {
         if (barkSpectrumSum.length === 0) {
           barkSpectrumSum = new Array(features.barkSpectrum.length).fill(0);
         }
-        for (let i = 0; i < features.barkSpectrum.length; i++) {
+        for (let i = 0; i < Math.min(features.barkSpectrum.length, barkSpectrumSum.length); i++) {
           barkSpectrumSum[i] += features.barkSpectrum[i] * weight;
         }
       }
       
-      // Accumulate other perceptual features
-      if (features.harmonicContent?.complexity !== undefined) harmonicComplexitySum += features.harmonicContent.complexity * weight;
-      if (features.emotionalTension !== undefined) emotionalTensionSum += features.emotionalTension * weight;
-      if (features.emotionalValence !== undefined) emotionalValenceSum += features.emotionalValence * weight;
-      if (features.emotionalArousal !== undefined) emotionalArousalSum += features.emotionalArousal * weight;
-      if (features.compressionRatio !== undefined) compressionSum += features.compressionRatio * weight;
-      if (features.dynamicRange !== undefined) dynamicRangeSum += features.dynamicRange * weight;
-      if (features.brightness !== undefined) brightnessSum += features.brightness * weight;
-      if (features.warmth !== undefined) warmthSum += features.warmth * weight;
-      if (features.roughness !== undefined) roughnessSum += features.roughness * weight;
-      if (features.groove !== undefined) grooveSum += features.groove * weight;
-      if (features.syncopation !== undefined) syncopationSum += features.syncopation * weight;
-      if (features.rhythmicComplexity !== undefined) rhythmicComplexitySum += features.rhythmicComplexity * weight;
-      if (features.perceivedLoudness !== undefined) perceivedLoudnessSum += features.perceivedLoudness * weight;
-      if (features.energyDensity !== undefined) energyDensitySum += features.energyDensity * weight;
-      if (features.energyFlow !== undefined) energyFlowSum += features.energyFlow * weight;
+      // Accumulate other perceptual features with null checks
+      if (features.harmonicContent?.complexity !== undefined) {
+        harmonicComplexitySum += features.harmonicContent.complexity * weight;
+      }
+      if (features.emotionalTension !== undefined && features.emotionalTension !== null) {
+        emotionalTensionSum += features.emotionalTension * weight;
+      }
+      if (features.emotionalValence !== undefined && features.emotionalValence !== null) {
+        emotionalValenceSum += features.emotionalValence * weight;
+      }
+      if (features.emotionalArousal !== undefined && features.emotionalArousal !== null) {
+        emotionalArousalSum += features.emotionalArousal * weight;
+      }
+      if (features.compressionRatio !== undefined && features.compressionRatio !== null) {
+        compressionSum += features.compressionRatio * weight;
+      }
+      if (features.dynamicRange !== undefined && features.dynamicRange !== null) {
+        dynamicRangeSum += features.dynamicRange * weight;
+      }
+      if (features.brightness !== undefined && features.brightness !== null) {
+        brightnessSum += features.brightness * weight;
+      }
+      if (features.warmth !== undefined && features.warmth !== null) {
+        warmthSum += features.warmth * weight;
+      }
+      if (features.roughness !== undefined && features.roughness !== null) {
+        roughnessSum += features.roughness * weight;
+      }
+      if (features.groove !== undefined && features.groove !== null) {
+        grooveSum += features.groove * weight;
+      }
+      if (features.syncopation !== undefined && features.syncopation !== null) {
+        syncopationSum += features.syncopation * weight;
+      }
+      if (features.rhythmicComplexity !== undefined && features.rhythmicComplexity !== null) {
+        rhythmicComplexitySum += features.rhythmicComplexity * weight;
+      }
+      if (features.perceivedLoudness !== undefined && features.perceivedLoudness !== null) {
+        perceivedLoudnessSum += features.perceivedLoudness * weight;
+      }
+      if (features.energyDensity !== undefined && features.energyDensity !== null) {
+        energyDensitySum += features.energyDensity * weight;
+      }
+      if (features.energyFlow !== undefined && features.energyFlow !== null) {
+        energyFlowSum += features.energyFlow * weight;
+      }
       
       // Musical key preference
-      if (features.keySignature) {
+      if (features.keySignature && typeof features.keySignature === 'string') {
         profile.preferredKeys[features.keySignature] = (profile.preferredKeys[features.keySignature] || 0) + weight;
       }
       
       // Chord progression familiarity
-      if (features.chordProgression) {
+      if (features.chordProgression && Array.isArray(features.chordProgression)) {
         const progressionKey = features.chordProgression.join('-');
         profile.chordProgressionFamiliarity[progressionKey] = (profile.chordProgressionFamiliarity[progressionKey] || 0) + weight;
       }
@@ -1295,18 +1417,17 @@ function buildEnhancedUserProfile(ratedTracks: any[]): UserProfile {
     
     // === LEGACY PREFERENCE BUILDING ===
     
-    // Genre analysis
-    if (track.genre) {
-      profile.genrePreference[track.genre] = (profile.genrePreference[track.genre] || 0) + weight;
-    }
+    // Genre analysis (extract from track name)
+    const name = track.name.toLowerCase();
     
-    // Artist analysis
-    if (track.artist) {
-      profile.artistPreference[track.artist] = (profile.artistPreference[track.artist] || 0) + weight;
+    // Artist analysis (extract from track name before first dash or hyphen)
+    const artistMatch = track.name.match(/^([^-–—]+)/);
+    if (artistMatch) {
+      const artist = artistMatch[1].trim();
+      profile.artistPreference[artist] = (profile.artistPreference[artist] || 0) + weight;
     }
     
     // Keyword analysis from track name
-    const name = track.name.toLowerCase();
     const keywords = name.split(/[\s\-_()[\]{}.,!?]+/).filter((word: string) => word.length > 2);
     keywords.forEach((keyword: string) => {
       profile.keywordPreference[keyword] = (profile.keywordPreference[keyword] || 0) + weight * 0.5;
@@ -1321,6 +1442,8 @@ function buildEnhancedUserProfile(ratedTracks: any[]): UserProfile {
       });
     }
   });
+  
+  console.log(`🔍 Final counts: tracks with features: ${validFeatureCount} tracks without features: ${tracks.length - validFeatureCount}`);
   
   // === AVERAGE PERCEPTUAL FEATURES ===
   
@@ -1360,19 +1483,11 @@ function buildEnhancedUserProfile(ratedTracks: any[]): UserProfile {
   
   // Normalize preferences
   Object.keys(profile.genrePreference).forEach(genre => {
-    profile.genrePreference[genre] = Math.min(profile.genrePreference[genre] / highRatedTracks.length, 1);
+    profile.genrePreference[genre] = Math.min(profile.genrePreference[genre] / tracks.length, 1);
   });
   
   Object.keys(profile.artistPreference).forEach(artist => {
-    profile.artistPreference[artist] = Math.min(profile.artistPreference[artist] / highRatedTracks.length, 1);
-  });
-  
-  Object.keys(profile.keywordPreference).forEach(keyword => {
-    profile.keywordPreference[keyword] = Math.min(profile.keywordPreference[keyword] / highRatedTracks.length, 1);
-  });
-  
-  Object.keys(profile.preferredKeys).forEach(key => {
-    profile.preferredKeys[key] = Math.min(profile.preferredKeys[key] / highRatedTracks.length, 1);
+    profile.artistPreference[artist] = Math.min(profile.artistPreference[artist] / tracks.length, 1);
   });
   
   return profile;

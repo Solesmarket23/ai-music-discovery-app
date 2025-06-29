@@ -367,8 +367,55 @@ export default function MusicRecognitionApp() {
           await audioContext.close();
           cleanup();
           
-          // Always return the features from Web Audio API analysis - they should be comprehensive
-          resolve(features);
+          // Validate that features have meaningful values
+          const featureValidation = {
+            hasSpectralCentroid: features.spectralCentroid !== undefined && features.spectralCentroid > 0,
+            hasBarkSpectrum: features.barkSpectrum && features.barkSpectrum.length > 0 && features.barkSpectrum.some(v => v > 0),
+            hasEmotionalProfile: features.emotionalTension !== undefined && features.emotionalTension > 0,
+            hasHarmonicContent: features.harmonicContent && features.harmonicContent.complexity > 0,
+            hasTimbralTexture: features.brightness !== undefined && features.brightness > 0
+          };
+          
+          console.log('🔍 Feature validation:', featureValidation);
+          
+          // If advanced features are all zero/invalid, enhance with basic features
+          if (!featureValidation.hasBarkSpectrum && !featureValidation.hasEmotionalProfile && !featureValidation.hasHarmonicContent) {
+            console.warn('⚠️ Advanced features appear to be empty, enhancing with basic analysis');
+            console.log('🔍 Sample feature values before enhancement:', {
+              barkSpectrum: features.barkSpectrum?.slice(0, 5),
+              emotionalTension: features.emotionalTension,
+              harmonicComplexity: features.harmonicContent?.complexity,
+              spectralCentroid: features.spectralCentroid
+            });
+            
+            // Enhance with basic feature extraction as backup
+            const basicFeatures = extractBasicFeatures(file.name);
+            
+            // Merge the features, preferring Web Audio API results where available
+            const enhancedFeatures: AudioFeatures = {
+              ...basicFeatures,
+              ...features,
+            };
+            
+            // Ensure we have at least some meaningful values
+            if (!enhancedFeatures.barkSpectrum || enhancedFeatures.barkSpectrum.every(v => v === 0)) {
+              enhancedFeatures.barkSpectrum = basicFeatures.barkSpectrum;
+            }
+            if (enhancedFeatures.emotionalTension === undefined || enhancedFeatures.emotionalTension === 0) {
+              enhancedFeatures.emotionalTension = basicFeatures.emotionalTension;
+              enhancedFeatures.emotionalValence = basicFeatures.emotionalValence;
+              enhancedFeatures.emotionalArousal = basicFeatures.emotionalArousal;
+            }
+            if (!enhancedFeatures.harmonicContent || enhancedFeatures.harmonicContent.complexity === 0) {
+              enhancedFeatures.harmonicContent = basicFeatures.harmonicContent;
+            }
+            
+            console.log('✅ Enhanced features with basic analysis fallback');
+            resolve(enhancedFeatures);
+          } else {
+            console.log('✅ Advanced features look good, using Web Audio API results');
+            resolve(features);
+          }
           
         } catch (error) {
           let errorDetails: { name?: string; message: string; stack?: string[] };
@@ -429,15 +476,29 @@ export default function MusicRecognitionApp() {
     const startIndex = Math.floor((channelData.length - segmentSize) / 2);
     const segment = channelData.slice(startIndex, startIndex + segmentSize);
     
-    // Perform FFT to get frequency domain data
-    const fftResult = performFFT(segment);
+    // Apply windowing to reduce spectral leakage
+    const windowedSegment = new Float32Array(segmentSize);
+    for (let i = 0; i < segmentSize; i++) {
+      // Hann window
+      const windowValue = 0.5 * (1 - Math.cos(2 * Math.PI * i / (segmentSize - 1)));
+      windowedSegment[i] = segment[i] * windowValue;
+    }
     
-    // Convert FFT result to frequency data similar to analyser output
+    // Perform FFT to get frequency domain data
+    const fftResult = performFFT(windowedSegment);
+    
+    // Convert FFT result to frequency data with proper normalization
     const frequencyData = new Float32Array(fftResult.length / 2);
+    const nyquistFreq = sampleRate / 2;
+    
     for (let i = 0; i < frequencyData.length; i++) {
-      const magnitude = Math.sqrt(fftResult[i * 2] ** 2 + fftResult[i * 2 + 1] ** 2);
-      // Convert magnitude to dB scale (similar to analyser.getFloatFrequencyData)
-      frequencyData[i] = magnitude > 0 ? 20 * Math.log10(magnitude / frequencyData.length) : -100;
+      const real = fftResult[i * 2];
+      const imag = fftResult[i * 2 + 1];
+      const magnitude = Math.sqrt(real * real + imag * imag);
+      
+      // Proper normalization and dB conversion
+      const normalizedMagnitude = magnitude / (segmentSize / 2);
+      frequencyData[i] = normalizedMagnitude > 1e-10 ? 20 * Math.log10(normalizedMagnitude) : -200;
     }
 
     console.log(`🔬 FFT Analysis complete: ${frequencyData.length} frequency bins, range: ${Math.min(...frequencyData).toFixed(1)} to ${Math.max(...frequencyData).toFixed(1)} dB`);
@@ -537,15 +598,26 @@ export default function MusicRecognitionApp() {
   const calculateBarkSpectrumFast = (frequencyData: Float32Array, sampleRate: number): number[] => {
     const barkBands = 24;
     const spectrum: number[] = [];
+    const nyquist = sampleRate / 2;
     
     for (let i = 0; i < barkBands; i++) {
       const freq = barkToFreq(i);
-      const bin = Math.floor((freq * frequencyData.length * 2) / sampleRate);
-      if (bin < frequencyData.length) {
-        const magnitude = Math.pow(10, frequencyData[bin] / 20);
+      const bin = Math.floor((freq * frequencyData.length) / nyquist);
+      
+      if (bin < frequencyData.length && frequencyData[bin] > -Infinity) {
+        // Convert from dB back to linear magnitude, but keep it reasonable
+        const magnitude = Math.pow(10, Math.max(frequencyData[bin], -60) / 20);
         spectrum.push(magnitude);
       } else {
-        spectrum.push(0);
+        spectrum.push(0.001); // Small non-zero value instead of exact zero
+      }
+    }
+    
+    // Normalize the spectrum
+    const maxValue = Math.max(...spectrum);
+    if (maxValue > 0) {
+      for (let i = 0; i < spectrum.length; i++) {
+        spectrum[i] = spectrum[i] / maxValue;
       }
     }
     
@@ -555,23 +627,28 @@ export default function MusicRecognitionApp() {
   const analyzeHarmonicsFast = (frequencyData: Float32Array, sampleRate: number) => {
     const fundamentalFreq = findFundamentalFrequencyFast(frequencyData, sampleRate);
     const harmonics: number[] = [];
+    const nyquist = sampleRate / 2;
     
     // Find first 10 harmonics
     for (let h = 1; h <= 10; h++) {
       const harmonicFreq = fundamentalFreq * h;
-      const bin = Math.floor((harmonicFreq * frequencyData.length * 2) / sampleRate);
-      if (bin < frequencyData.length) {
-        const magnitude = Math.pow(10, frequencyData[bin] / 20);
-        harmonics.push(magnitude);
+      if (harmonicFreq < nyquist) {
+        const bin = Math.floor((harmonicFreq * frequencyData.length) / nyquist);
+        if (bin < frequencyData.length && frequencyData[bin] > -Infinity) {
+          const magnitude = Math.pow(10, Math.max(frequencyData[bin], -60) / 20);
+          harmonics.push(magnitude);
+        } else {
+          harmonics.push(0.001);
+        }
       }
     }
     
-    const complexity = harmonics.length > 0 ? 
-      harmonics.reduce((sum, h) => sum + h, 0) / (harmonics[0] || 1) : 0;
+    const complexity = harmonics.length > 1 ? 
+      harmonics.slice(1).reduce((sum, h) => sum + h, 0) / Math.max(harmonics[0], 0.001) : 2;
     
     return {
-      complexity: Math.min(complexity, 10),
-      fundamentalFreq,
+      complexity: Math.max(1, Math.min(complexity, 10)),
+      fundamentalFreq: Math.max(fundamentalFreq, 80),
       harmonics
     };
   };
@@ -579,46 +656,53 @@ export default function MusicRecognitionApp() {
   const findFundamentalFrequencyFast = (frequencyData: Float32Array, sampleRate: number): number => {
     let maxMagnitude = -Infinity;
     let fundamentalBin = 0;
+    const nyquist = sampleRate / 2;
     
     // Look for fundamental in typical vocal/instrument range (80-800 Hz)
-    const minBin = Math.floor((80 * frequencyData.length * 2) / sampleRate);
-    const maxBin = Math.floor((800 * frequencyData.length * 2) / sampleRate);
+    const minBin = Math.floor((80 * frequencyData.length) / nyquist);
+    const maxBin = Math.floor((800 * frequencyData.length) / nyquist);
     
     for (let i = minBin; i < Math.min(maxBin, frequencyData.length); i++) {
-      if (frequencyData[i] > maxMagnitude) {
+      if (frequencyData[i] > maxMagnitude && frequencyData[i] > -Infinity) {
         maxMagnitude = frequencyData[i];
         fundamentalBin = i;
       }
     }
     
-    return (fundamentalBin * sampleRate) / (frequencyData.length * 2);
+    // If no peak found, default to a reasonable fundamental
+    const frequency = fundamentalBin > 0 ? (fundamentalBin * nyquist) / frequencyData.length : 220;
+    return Math.max(frequency, 80);
   };
 
   const analyzeEmotionalProfileFast = (frequencyData: Float32Array, timeData: Float32Array, sampleRate: number) => {
     // Tension: based on high frequency content and dissonance
     let highFreqEnergy = 0;
     let totalEnergy = 0;
+    const nyquist = sampleRate / 2;
     
     for (let i = 0; i < frequencyData.length; i++) {
-      const magnitude = Math.pow(10, frequencyData[i] / 20);
-      const freq = (i * sampleRate) / (frequencyData.length * 2);
-      
-      totalEnergy += magnitude;
-      if (freq > 2000) highFreqEnergy += magnitude;
+      if (frequencyData[i] > -Infinity) {
+        const magnitude = Math.pow(10, Math.max(frequencyData[i], -60) / 20);
+        const freq = (i * nyquist) / frequencyData.length;
+        
+        totalEnergy += magnitude;
+        if (freq > 2000) highFreqEnergy += magnitude;
+      }
     }
     
-    const tension = totalEnergy > 0 ? Math.min(highFreqEnergy / totalEnergy, 1) : 0.5;
+    const tension = totalEnergy > 0 ? Math.min(highFreqEnergy / totalEnergy * 2, 1) : 0.5;
     
     // Valence: based on major/minor tonality (simplified)
     const valence = calculateTonalValenceFast(frequencyData, sampleRate);
     
     // Arousal: based on overall energy and tempo indicators
-    const arousal = Math.min(totalEnergy / frequencyData.length / 100, 1);
+    const normalizedEnergy = totalEnergy / Math.max(frequencyData.length, 1);
+    const arousal = Math.min(normalizedEnergy / 10, 1);
     
     return {
-      tension: Math.max(0, Math.min(1, tension)),
-      valence: Math.max(0, Math.min(1, valence)),
-      arousal: Math.max(0, Math.min(1, arousal))
+      tension: Math.max(0.1, Math.min(1, tension)),
+      valence: Math.max(0.1, Math.min(1, valence)),
+      arousal: Math.max(0.1, Math.min(1, arousal))
     };
   };
 
@@ -626,14 +710,18 @@ export default function MusicRecognitionApp() {
     // Simplified major/minor detection based on frequency content
     let majorScore = 0;
     let minorScore = 0;
+    let totalScore = 0;
+    const nyquist = sampleRate / 2;
     
     // Major thirds tend to be around frequency ratios of 5:4
     // Minor thirds tend to be around 6:5
     for (let i = 1; i < frequencyData.length - 1; i++) {
-      const freq = (i * sampleRate) / (frequencyData.length * 2);
-      const magnitude = Math.pow(10, frequencyData[i] / 20);
+      const freq = (i * nyquist) / frequencyData.length;
       
-      if (freq > 200 && freq < 2000) {
+      if (frequencyData[i] > -Infinity && freq > 200 && freq < 2000) {
+        const magnitude = Math.pow(10, Math.max(frequencyData[i], -60) / 20);
+        totalScore += magnitude;
+        
         // Look for harmonic ratios indicating major/minor characteristics
         const majorRatio = Math.abs((freq % 400) - 320) < 50; // Simplified major detection
         const minorRatio = Math.abs((freq % 400) - 300) < 50; // Simplified minor detection
@@ -643,7 +731,13 @@ export default function MusicRecognitionApp() {
       }
     }
     
-    return majorScore > minorScore ? 0.7 : 0.3;
+    if (totalScore === 0) return 0.5; // Neutral if no tonal content
+    
+    const majorRatio = majorScore / totalScore;
+    const minorRatio = minorScore / totalScore;
+    
+    // Return a value between 0.2 and 0.8 based on major/minor tendency
+    return majorRatio > minorRatio ? 0.6 + (majorRatio * 0.2) : 0.4 - (minorRatio * 0.2);
   };
 
   const analyzeTimbralTextureFast = (frequencyData: Float32Array, sampleRate: number) => {
@@ -651,39 +745,53 @@ export default function MusicRecognitionApp() {
     let midFreqEnergy = 0;
     let lowFreqEnergy = 0;
     let totalEnergy = 0;
+    const nyquist = sampleRate / 2;
     
     for (let i = 0; i < frequencyData.length; i++) {
-      const magnitude = Math.pow(10, frequencyData[i] / 20);
-      const freq = (i * sampleRate) / (frequencyData.length * 2);
-      
-      totalEnergy += magnitude;
-      
-      if (freq > 5000) {
-        highFreqEnergy += magnitude;
-      } else if (freq > 1000) {
-        midFreqEnergy += magnitude;
-      } else if (freq > 200) {
-        lowFreqEnergy += magnitude;
+      if (frequencyData[i] > -Infinity) {
+        const magnitude = Math.pow(10, Math.max(frequencyData[i], -60) / 20);
+        const freq = (i * nyquist) / frequencyData.length;
+        
+        totalEnergy += magnitude;
+        
+        if (freq > 5000) {
+          highFreqEnergy += magnitude;
+        } else if (freq > 1000) {
+          midFreqEnergy += magnitude;
+        } else if (freq > 200) {
+          lowFreqEnergy += magnitude;
+        }
       }
     }
     
-    const brightness = totalEnergy > 0 ? highFreqEnergy / totalEnergy : 0.4;
-    const warmth = totalEnergy > 0 ? lowFreqEnergy / totalEnergy : 0.5;
+    const brightness = totalEnergy > 0 ? Math.min(highFreqEnergy / totalEnergy, 1) : 0.4;
+    const warmth = totalEnergy > 0 ? Math.min(lowFreqEnergy / totalEnergy, 1) : 0.5;
     
     // Roughness: measure spectral irregularity
     let roughness = 0;
+    let validComparisons = 0;
+    
     for (let i = 1; i < frequencyData.length - 1; i++) {
-      const prev = Math.pow(10, frequencyData[i - 1] / 20);
-      const current = Math.pow(10, frequencyData[i] / 20);
-      const next = Math.pow(10, frequencyData[i + 1] / 20);
-      
-      if (prev + next > 0) {
-        roughness += Math.abs(current - (prev + next) / 2) / (prev + next);
+      if (frequencyData[i] > -Infinity && frequencyData[i-1] > -Infinity && frequencyData[i+1] > -Infinity) {
+        const prev = Math.pow(10, Math.max(frequencyData[i - 1], -60) / 20);
+        const current = Math.pow(10, Math.max(frequencyData[i], -60) / 20);
+        const next = Math.pow(10, Math.max(frequencyData[i + 1], -60) / 20);
+        
+        const avgNeighbors = (prev + next) / 2;
+        if (avgNeighbors > 0) {
+          roughness += Math.abs(current - avgNeighbors) / (avgNeighbors + current);
+          validComparisons++;
+        }
       }
     }
-    roughness = Math.min(roughness / (frequencyData.length - 2), 1);
     
-    return { brightness, warmth, roughness };
+    roughness = validComparisons > 0 ? Math.min(roughness / validComparisons, 1) : 0.3;
+    
+    return { 
+      brightness: Math.max(0.1, brightness), 
+      warmth: Math.max(0.1, warmth), 
+      roughness: Math.max(0.1, roughness) 
+    };
   };
 
   const detectTempoFast = (audioData: Float32Array, sampleRate: number): number => {
