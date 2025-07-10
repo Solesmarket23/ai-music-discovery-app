@@ -1,0 +1,18 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "framework": "nextjs",
+  "installCommand": "npm install",
+  "regions": ["iad1"],
+  "functions": {
+    "src/app/api/music-ai/recommendations/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/deepgram/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/replicate/generate-image/route.ts": {
+      "maxDuration": 30
+    }
+  }
+}

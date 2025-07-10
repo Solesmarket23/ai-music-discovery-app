@@ -1,8 +1,13 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Upload, Play, Pause, SkipForward, SkipBack, Shuffle, Star, Brain, Music, Volume2, Minimize2, Maximize2, Settings, Search, ChevronDown, ChevronUp, Save, RotateCcw, Eye, EyeOff, Zap, Palette, Monitor, Sun, Moon, Info, HelpCircle, Download, Upload as UploadIcon, Users, Sparkles } from "lucide-react";
+import { Upload, Play, Pause, SkipForward, SkipBack, Shuffle, Star, Brain, Music, Volume2, Minimize2, Maximize2, Settings, Search, ChevronDown, ChevronUp, Save, RotateCcw, Eye, EyeOff, Zap, Palette, Monitor, Sun, Moon, Info, HelpCircle, Download, Upload as UploadIcon, Users, Sparkles, LogOut } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/lib/hooks/useAuth";
+import SignInWithGoogle from "@/components/SignInWithGoogle";
+import { db, storage } from "@/lib/firebase/firebase";
+import { collection, doc, setDoc, getDoc, updateDoc, deleteDoc, query, where, getDocs, addDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 
 // Advanced Audio Analysis Types
 interface AudioFeatures {
@@ -67,9 +72,11 @@ interface AIInsights {
 }
 
 export default function MusicRecognitionApp() {
+  const { user, signOut } = useAuth();
   const [currentView, setCurrentView] = useState<'landing' | 'upload' | 'library' | 'pricing' | 'settings'>('landing');
   const [isAnnualBilling, setIsAnnualBilling] = useState(false);
   const [musicLibrary, setMusicLibrary] = useState<MusicTrack[]>([]);
+  const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
   const [currentTrack, setCurrentTrack] = useState<MusicTrack | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -237,10 +244,18 @@ export default function MusicRecognitionApp() {
       const audio = new Audio();
       const url = URL.createObjectURL(file);
       let timeoutId: NodeJS.Timeout | null = null;
+      let hasResolved = false; // Prevent multiple resolutions
       
       const cleanup = () => {
         if (timeoutId) clearTimeout(timeoutId);
         URL.revokeObjectURL(url);
+      };
+      
+      const resolveOnce = (features: AudioFeatures) => {
+        if (hasResolved) return;
+        hasResolved = true;
+        cleanup();
+        resolve(features);
       };
       
       audio.addEventListener('loadedmetadata', async () => {
@@ -250,8 +265,9 @@ export default function MusicRecognitionApp() {
           // Check for browser audio support
           if (!window.AudioContext && !(window as any).webkitAudioContext) {
             console.warn('⚠️ AudioContext not supported, using basic analysis');
-            cleanup();
-            resolve(extractBasicFeatures(file.name));
+            const basicFeatures = extractBasicFeatures(file.name);
+            console.log('🎯 Basic features generated (no AudioContext):', Object.keys(basicFeatures).length, 'features');
+            resolveOnce(basicFeatures);
             return;
           }
           
@@ -278,8 +294,9 @@ export default function MusicRecognitionApp() {
             console.error('❌ Audio decoding failed:', decodeError);
             console.warn(`⚠️ File format may not be supported: ${file.type || 'unknown type'}`);
             await audioContext.close();
-            cleanup();
-            resolve(extractBasicFeatures(file.name));
+            const basicFeatures = extractBasicFeatures(file.name);
+            console.log('🎯 Basic features generated (decode failed):', Object.keys(basicFeatures).length, 'features');
+            resolveOnce(basicFeatures);
             return;
           }
           
@@ -287,8 +304,9 @@ export default function MusicRecognitionApp() {
           if (!audioBuffer || audioBuffer.length === 0) {
             console.warn('⚠️ Invalid audio buffer, using basic analysis');
             await audioContext.close();
-            cleanup();
-            resolve(extractBasicFeatures(file.name));
+            const basicFeatures = extractBasicFeatures(file.name);
+            console.log('🎯 Basic features generated (invalid buffer):', Object.keys(basicFeatures).length, 'features');
+            resolveOnce(basicFeatures);
             return;
           }
           
@@ -312,10 +330,9 @@ export default function MusicRecognitionApp() {
           
           // Close the audio context to free resources
           await audioContext.close();
-          cleanup();
           
           // Always return the features from Web Audio API analysis - they should be comprehensive
-          resolve(features);
+          resolveOnce(features);
           
         } catch (error) {
           let errorDetails: { name?: string; message: string; stack?: string[] };
@@ -332,11 +349,11 @@ export default function MusicRecognitionApp() {
           
           console.error('❌ Advanced audio analysis failed, error details:', errorDetails);
           console.warn('⚠️ Falling back to basic analysis for:', file.name);
-          cleanup();
+          
           // Don't return empty - return basic analysis
           const basicFeatures = extractBasicFeatures(file.name);
-          console.log(`🎯 Basic features generated:`, basicFeatures);
-          resolve(basicFeatures);
+          console.log(`🎯 Basic features generated (error fallback):`, Object.keys(basicFeatures).length, 'features');
+          resolveOnce(basicFeatures);
         }
       });
       
@@ -346,20 +363,34 @@ export default function MusicRecognitionApp() {
           fileType: file.type,
           fileName: file.name
         });
-        cleanup();
-        resolve(extractBasicFeatures(file.name));
+        const basicFeatures = extractBasicFeatures(file.name);
+        console.log(`🎯 Basic features generated (load error):`, Object.keys(basicFeatures).length, 'features');
+        resolveOnce(basicFeatures);
+      });
+      
+      audio.addEventListener('canplay', () => {
+        console.log(`🎵 Audio can play: ${file.name}`);
       });
       
       // Set timeout to prevent hanging - reduced timeout for faster fallback
       timeoutId = setTimeout(() => {
-        console.warn('⏰ Audio analysis timeout (8s), using basic analysis for:', file.name);
-        cleanup();
+        console.warn('⏰ Audio analysis timeout (15s), using basic analysis for:', file.name);
         const timeoutFeatures = extractBasicFeatures(file.name);
-        console.log(`⏰ Timeout fallback features:`, timeoutFeatures);
-        resolve(timeoutFeatures);
+        console.log(`⏰ Timeout fallback features:`, Object.keys(timeoutFeatures).length, 'features');
+        resolveOnce(timeoutFeatures);
       }, 15000); // 15 second timeout to allow more time for audio analysis
       
-      audio.src = url;
+      // Try to load the audio
+      try {
+        console.log(`🎵 Setting audio src for: ${file.name}`);
+        audio.src = url;
+        audio.load(); // Explicitly trigger loading
+      } catch (srcError) {
+        console.error('❌ Failed to set audio src:', srcError);
+        const basicFeatures = extractBasicFeatures(file.name);
+        console.log(`🎯 Basic features generated (src error):`, Object.keys(basicFeatures).length, 'features');
+        resolveOnce(basicFeatures);
+      }
     });
   };
 
@@ -1575,10 +1606,118 @@ export default function MusicRecognitionApp() {
     }
   }, [musicLibrary]);
 
-  // Load stored ratings on component mount
+  // === FIREBASE DATA MANAGEMENT ===
+  
+  // Save track metadata to Firestore
+  const saveTrackToFirestore = async (track: MusicTrack, fileUrl: string) => {
+    if (!user) return;
+    
+    try {
+      const trackData = {
+        id: track.id,
+        name: track.name,
+        fileUrl: fileUrl,
+        duration: track.duration,
+        rating: track.rating || null,
+        audioFeatures: track.audioFeatures || null,
+        analyzed: track.analyzed || false,
+        uploadedAt: new Date().toISOString(),
+        userId: user.uid
+      };
+      
+      await setDoc(doc(db, 'users', user.uid, 'tracks', track.id), trackData);
+      console.log(`✅ Track saved to Firestore: ${track.name}`);
+    } catch (error) {
+      console.error('❌ Error saving track to Firestore:', error);
+    }
+  };
+  
+  // Load user's music library from Firestore
+  const loadUserLibraryFromFirestore = async () => {
+    if (!user) return;
+    
+    setIsLoadingLibrary(true);
+    try {
+      console.log('📚 Loading user library from Firestore...');
+      const tracksQuery = query(collection(db, 'users', user.uid, 'tracks'));
+      const querySnapshot = await getDocs(tracksQuery);
+      
+      const loadedTracks: MusicTrack[] = [];
+      
+      for (const doc of querySnapshot.docs) {
+        const data = doc.data();
+        const track: MusicTrack = {
+          id: data.id,
+          name: data.name,
+          file: new File([], data.name), // Placeholder file object
+          url: data.fileUrl,
+          duration: data.duration,
+          rating: data.rating,
+          audioFeatures: data.audioFeatures,
+          analyzed: data.analyzed,
+        };
+        loadedTracks.push(track);
+      }
+      
+      setMusicLibrary(loadedTracks);
+      console.log(`✅ Loaded ${loadedTracks.length} tracks from Firestore`);
+      
+      if (loadedTracks.length > 0) {
+        setCurrentView('library');
+        setShowToast({ 
+          message: `Welcome back! Loaded ${loadedTracks.length} songs from your library.`, 
+          show: true 
+        });
+        setTimeout(() => setShowToast(null), 3000);
+      }
+    } catch (error) {
+      console.error('❌ Error loading library from Firestore:', error);
+    } finally {
+      setIsLoadingLibrary(false);
+    }
+  };
+  
+  // Update track rating in Firestore
+  const updateTrackRating = async (trackId: string, rating: number) => {
+    if (!user) return;
+    
+    try {
+      await updateDoc(doc(db, 'users', user.uid, 'tracks', trackId), {
+        rating: rating,
+        ratedAt: new Date().toISOString()
+      });
+      console.log(`✅ Rating updated in Firestore for track: ${trackId}`);
+    } catch (error) {
+      console.error('❌ Error updating rating in Firestore:', error);
+    }
+  };
+  
+  // Delete track from Firestore and Storage
+  const deleteTrackFromFirebase = async (track: MusicTrack) => {
+    if (!user) return;
+    
+    try {
+      // Delete from Firestore
+      await deleteDoc(doc(db, 'users', user.uid, 'tracks', track.id));
+      
+      // Delete from Storage if it's a Firebase URL
+      if (track.url && track.url.includes('firebasestorage.googleapis.com')) {
+        const storageRef = ref(storage, `users/${user.uid}/tracks/${track.id}`);
+        await deleteObject(storageRef);
+      }
+      
+      console.log(`✅ Track deleted from Firebase: ${track.name}`);
+    } catch (error) {
+      console.error('❌ Error deleting track from Firebase:', error);
+    }
+  };
+
+  // Load user library when they sign in
   useEffect(() => {
-    console.log('🔄 Music app initialized - checking for stored ratings...');
-  }, []);
+    if (user && !isLoadingLibrary) {
+      loadUserLibraryFromFirestore();
+    }
+  }, [user]);
 
   useEffect(() => {
     const ratedSongs = musicLibrary.filter(track => track.rating).length;
@@ -1683,7 +1822,7 @@ export default function MusicRecognitionApp() {
   // Handle file uploads with advanced audio analysis
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (!files) return;
+    if (!files || !user) return;
 
     console.log(`🎵 Starting upload for ${files.length} files...`);
     setIsAnalyzing(true);
@@ -1698,14 +1837,24 @@ export default function MusicRecognitionApp() {
           // Get basic duration first (quick operation)
           const duration = await getAudioDuration(file);
           
+          // Upload to Firebase Storage
+          console.log(`☁️ Uploading to Firebase Storage: ${file.name}`);
+          const trackId = `track-${Date.now()}-${i}`;
+          const storageRef = ref(storage, `users/${user.uid}/tracks/${trackId}`);
+          const uploadResult = await uploadBytes(storageRef, file);
+          const fileUrl = await getDownloadURL(uploadResult.ref);
+          
           const track: MusicTrack = {
-            id: `track-${Date.now()}-${i}`,
+            id: trackId,
             name: file.name.replace(/\.(mp3|wav|m4a)$/i, ''),
             file,
-            url: URL.createObjectURL(file),
+            url: fileUrl, // Use Firebase URL instead of object URL
             duration: duration,
             analyzed: false, // Will be analyzed in background
           };
+          
+          // Save metadata to Firestore immediately
+          await saveTrackToFirestore(track, fileUrl);
           
           newTracks.push(track);
           
@@ -1777,6 +1926,15 @@ export default function MusicRecognitionApp() {
               ? { ...t, audioFeatures, analyzed: true }
               : t
           ));
+          
+          // Update Firestore with audio features
+          if (user) {
+            await updateDoc(doc(db, 'users', user.uid, 'tracks', track.id), {
+              audioFeatures: audioFeatures,
+              analyzed: true,
+              analyzedAt: new Date().toISOString()
+            });
+          }
         }
         
         // Always increment count if we got features, even if they're basic
@@ -2021,6 +2179,11 @@ export default function MusicRecognitionApp() {
       
       return updatedTracks;
     });
+    
+    // Also save to Firestore if user is logged in
+    if (user) {
+      await updateTrackRating(trackId, rating);
+    }
 
     const ratedSongs = musicLibrary.filter(track => track.rating).length + 1;
     setAiInsights(prev => ({
@@ -2305,7 +2468,54 @@ export default function MusicRecognitionApp() {
   const renderLandingPage = () => (
     <div className="min-h-screen flex items-start justify-center relative pt-16 pb-8">
       {/* Floating Navigation Buttons */}
-      <div className="fixed top-6 right-6 z-50 flex flex-col space-y-3">
+      <div className="fixed top-6 right-6 z-50 flex items-center space-x-3">
+        {/* User Authentication */}
+        {user ? (
+          <>
+            {/* User Info */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8, y: -20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ delay: 1.6, type: "spring", damping: 20 }}
+              className="flex items-center space-x-3 bg-gray-900/90 backdrop-blur-xl px-4 py-2 rounded-full border border-white/10"
+            >
+              {user.photoURL && (
+                <img 
+                  src={user.photoURL} 
+                  alt={user.displayName || 'User'} 
+                  className="w-8 h-8 rounded-full"
+                />
+              )}
+              <span className="text-white font-medium">{user.displayName || user.email}</span>
+            </motion.div>
+            
+            {/* Sign Out Button */}
+            <motion.button
+              initial={{ opacity: 0, scale: 0.8, y: -20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ delay: 1.7, type: "spring", damping: 20 }}
+              whileHover={{ scale: 1.05, y: -2 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => signOut()}
+              className="bg-gradient-to-r from-red-600/90 to-pink-600/90 backdrop-blur-xl text-white px-4 py-2 rounded-full shadow-lg hover:shadow-red-500/25 transition-all duration-300 border border-white/10"
+            >
+              <div className="flex items-center space-x-2">
+                <LogOut className="h-4 w-4" />
+                <span className="font-semibold">Sign Out</span>
+              </div>
+            </motion.button>
+          </>
+        ) : (
+          {/* Sign In Button */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8, y: -20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ delay: 1.6, type: "spring", damping: 20 }}
+          >
+            <SignInWithGoogle />
+          </motion.div>
+        )}
+        
         {/* Settings Button */}
         <motion.button
           initial={{ opacity: 0, scale: 0.8, y: -20 }}
@@ -2683,8 +2893,24 @@ export default function MusicRecognitionApp() {
                y: -10,
                transition: { type: "spring", damping: 20 }
              }}
-             onClick={() => setCurrentView('upload')}
-             onKeyDown={(e) => e.key === 'Enter' && setCurrentView('upload')}
+             onClick={() => {
+              if (!user) {
+                setShowToast({ message: "Please sign in to upload music", show: true });
+                setTimeout(() => setShowToast(null), 3000);
+                return;
+              }
+              setCurrentView('upload');
+            }}
+             onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                if (!user) {
+                  setShowToast({ message: "Please sign in to upload music", show: true });
+                  setTimeout(() => setShowToast(null), 3000);
+                  return;
+                }
+                setCurrentView('upload');
+              }
+            }}
              tabIndex={0}
              role="button"
              aria-label="Upload your music collection to get started"
@@ -3116,6 +3342,24 @@ export default function MusicRecognitionApp() {
               </motion.button>
               
               <div className="flex items-center space-x-3">
+                {/* User Info */}
+                {user && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex items-center space-x-3 bg-gray-900/90 backdrop-blur-xl px-4 py-2 rounded-full border border-white/10"
+                  >
+                    {user.photoURL && (
+                      <img 
+                        src={user.photoURL} 
+                        alt={user.displayName || 'User'} 
+                        className="w-8 h-8 rounded-full"
+                      />
+                    )}
+                    <span className="text-white font-medium">{user.displayName || user.email}</span>
+                  </motion.div>
+                )}
+                
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -3129,12 +3373,35 @@ export default function MusicRecognitionApp() {
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => setCurrentView('upload')}
+                  onClick={() => {
+                    if (!user) {
+                      setShowToast({ message: "Please sign in to upload music", show: true });
+                      setTimeout(() => setShowToast(null), 3000);
+                      return;
+                    }
+                    setCurrentView('upload');
+                  }}
                   className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-pink-500/30 rounded-full text-pink-300 hover:text-pink-200 transition-all duration-300"
                 >
                   <Upload className="h-4 w-4" />
                   <span>Add More Songs</span>
                 </motion.button>
+                
+                {/* Sign Out Button */}
+                {user && (
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      signOut();
+                      setCurrentView('landing');
+                    }}
+                    className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-red-600/20 to-pink-600/20 border border-red-500/30 rounded-full text-red-300 hover:text-red-200 transition-all duration-300"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>Sign Out</span>
+                  </motion.button>
+                )}
               </div>
             </div>
             
