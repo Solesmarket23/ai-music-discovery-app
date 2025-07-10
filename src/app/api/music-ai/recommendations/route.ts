@@ -1326,8 +1326,8 @@ function buildEnhancedUserProfile(ratedTracks: any[]): UserProfile {
   
   if (validFeatureCount > 0) {
     // Average bark spectrum
-    if (barkSpectrumSum && barkSpectrumSum.length > 0) {
-      profile.avgBarkSpectrum = barkSpectrumSum.map(sum => sum / validFeatureCount);
+    if (barkSpectrumSum && Array.isArray(barkSpectrumSum) && barkSpectrumSum.length > 0) {
+      profile.avgBarkSpectrum = (barkSpectrumSum as number[]).map(sum => sum / validFeatureCount);
     }
     
     // Average other features
