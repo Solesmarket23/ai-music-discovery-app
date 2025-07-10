@@ -1234,7 +1234,7 @@ function buildEnhancedUserProfile(ratedTracks: any[]): UserProfile {
   
   // === PERCEPTUAL FEATURE AVERAGING ===
   
-  let barkSpectrumSum: number[] = [];
+  let barkSpectrumSum: number[] | null = null;
   let harmonicComplexitySum = 0;
   let emotionalTensionSum = 0, emotionalValenceSum = 0, emotionalArousalSum = 0;
   let compressionSum = 0, dynamicRangeSum = 0;
@@ -1256,7 +1256,7 @@ function buildEnhancedUserProfile(ratedTracks: any[]): UserProfile {
       
       // Bark spectrum averaging
       if (features.barkSpectrum) {
-        if (barkSpectrumSum.length === 0) {
+        if (!barkSpectrumSum) {
           barkSpectrumSum = new Array(features.barkSpectrum.length).fill(0);
         }
         for (let i = 0; i < features.barkSpectrum.length; i++) {
@@ -1326,7 +1326,7 @@ function buildEnhancedUserProfile(ratedTracks: any[]): UserProfile {
   
   if (validFeatureCount > 0) {
     // Average bark spectrum
-    if (barkSpectrumSum.length > 0) {
+    if (barkSpectrumSum && barkSpectrumSum.length > 0) {
       profile.avgBarkSpectrum = barkSpectrumSum.map(sum => sum / validFeatureCount);
     }
     
